@@ -26,6 +26,10 @@ def detect_format(path: Path) -> str | None:
     return None
 
 
+def is_supported(path: Path) -> bool:
+    return path.suffix.lower() in SUPPORTED_EXTS
+
+
 def _parse_pub_date(value: str | None):
     if not value:
         return None
@@ -63,6 +67,9 @@ async def ingest_file(path: Path) -> tuple[str, str] | None:
         return None
     if not path.is_file():
         return None
+    # Normalise to an absolute, resolved path so the watcher (absolute) and the webhook
+    # (often relative) don't create duplicate rows for the same file.
+    path = path.resolve()
 
     file_hash = _hash_file(path)
     stat = path.stat()

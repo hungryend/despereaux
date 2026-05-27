@@ -12,7 +12,8 @@ from despereaux.repos.users import get_or_create_user
 settings = get_settings()
 
 # Paths that bypass auth (no user attached).
-_PUBLIC_PATHS = ("/healthz", "/static/", "/favicon.ico")
+# /api/admin/sync uses a shared token instead of Authentik (internal Docker callers).
+_PUBLIC_PATHS = ("/healthz", "/static/", "/favicon.ico", "/api/admin/sync")
 
 
 def _parse_groups(raw: str | None) -> list[str]:

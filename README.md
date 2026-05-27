@@ -59,6 +59,38 @@ curl -X POST https://despereaux.sipador.duckdns.org/api/admin/scan \
 
 Or hit it from a browser via DevTools' fetch console while logged in.
 
+## Chaptarr integration
+
+Two complementary mechanisms keep the library in sync:
+
+1. **Filesystem watcher** (always on). Despereaux runs `watchfiles.awatch` over the library mount. New files are picked up within ~3 s (after the size stops changing, so half-downloaded files aren't ingested). Deletes remove the row. This works regardless of who put the file there — chaptarr, Calibre, scp, manual drop.
+
+2. **Webhook** `POST /api/admin/sync` for instant chaptarr (or Readarr) "on import" triggers.
+   ```bash
+   curl -X POST http://despereaux:8000/api/admin/sync \
+     -H "Authorization: Bearer ${DESPEREAUX_WEBHOOK_TOKEN}" \
+     -H "Content-Type: application/json" \
+     -d '{"paths":["/ebooks/Author/Book.epub"]}'
+   ```
+   Empty `paths` → queues a full scan; non-empty → targeted ingest of those files only. Token comes from `DESPEREAUX_WEBHOOK_TOKEN` env (endpoint returns 503 if unset).
+
+### Wire it into chaptarr's container
+
+The media-server compose has been updated so chaptarr can call the webhook:
+- `../despereaux/scripts:/scripts:ro` is mounted into chaptarr
+- `DESPEREAUX_URL=http://despereaux:8000` and `DESPEREAUX_TOKEN=${DESPEREAUX_WEBHOOK_TOKEN}` are set in chaptarr's env
+- `MOUNT_TRANSLATE_FROM=/books` → `MOUNT_TRANSLATE_TO=/ebooks` translates chaptarr's mount point to despereaux's
+
+In chaptarr's UI: **Settings → Connect → + Custom Script**, Path = `/scripts/notify-despereaux.sh`, Triggers = On Import + On Upgrade. Use the **Test** button — it pings despereaux's `/healthz`.
+
+Set `DESPEREAUX_WEBHOOK_TOKEN` in your deploy box's environment (or `.env`) so both services see it:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Add the output as DESPEREAUX_WEBHOOK_TOKEN=... in the media-server .env
+```
+
+If chaptarr doesn't actually surface a Custom Scripts UI (it's an alpha Readarr fork), the filesystem watcher alone is enough — chaptarr → file lands in `${MEDIA_MOUNT}/Ebooks` → despereaux watcher → ingested in ~3 s.
+
 ## Local development
 
 ```bash

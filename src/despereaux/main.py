@@ -73,11 +73,13 @@ async def lifespan(app: FastAPI):
     # Kick off a one-shot scan in the background; don't block startup.
     if settings.library_path.exists():
         asyncio.create_task(scanner.run_once())
+        scanner.start_watcher()
     else:
-        log.warning("library path %s does not exist; skipping initial scan", settings.library_path)
+        log.warning("library path %s does not exist; skipping initial scan + watcher", settings.library_path)
 
     yield
     log.info("shutting down")
+    await scanner.stop_watcher()
 
 
 def create_app() -> FastAPI:

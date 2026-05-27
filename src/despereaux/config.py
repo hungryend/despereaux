@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     dev_mode: bool = False
     admin_group: str = "ebook-admin"
 
+    # Shared token for /api/admin/sync (chaptarr or other internal callers).
+    # If unset, the sync endpoint returns 503 and the only ingest entry points
+    # are the filesystem watcher + /api/admin/scan (Authentik admin-gated).
+    webhook_token: str | None = None
+
     google_books_api_key: str | None = None
     log_level: str = "INFO"
 
