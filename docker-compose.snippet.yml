@@ -1,0 +1,31 @@
+# Paste this service block into media-server/docker-compose.yml.
+# Adjust ${MEDIA_MOUNT} and ${MOUNT_POINT} to match the existing variables in that compose file.
+
+services:
+  despereaux:
+    build: ../despereaux
+    container_name: despereaux
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Brisbane
+      - DESPEREAUX_LIBRARY_PATH=/ebooks
+      - DESPEREAUX_DB_URL=sqlite+aiosqlite:////config/despereaux.db
+      - DESPEREAUX_DATA_DIR=/config
+      - DESPEREAUX_DEV_MODE=false
+      - DESPEREAUX_ADMIN_GROUP=ebook-admin
+      - DESPEREAUX_GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+      - DESPEREAUX_LOG_LEVEL=INFO
+    volumes:
+      - ${MEDIA_MOUNT}/Ebooks:/ebooks
+      - ${MOUNT_POINT}/despereaux:/config
+    ports:
+      - "8810:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

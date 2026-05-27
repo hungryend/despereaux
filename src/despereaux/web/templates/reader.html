@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>{{ book.title }} — despereaux</title>
+    <link rel="stylesheet" href="/static/reader/assets/reader.css" />
+    <script>
+      window.DESPEREAUX_BOOK = {
+        id: {{ book.id|tojson }},
+        title: {{ book.title|tojson }},
+        format: {{ book.format|tojson }},
+        fileUrl: "/api/books/{{ book.id }}/file",
+        manifestUrl: "/api/books/{{ book.id }}/manifest",
+        progressUrl: "/api/books/{{ book.id }}/progress"
+      };
+    </script>
+  </head>
+  <body>
+    <header class="reader-bar">
+      <a class="back" href="/book/{{ book.id }}" title="Back to details">←</a>
+      <div class="title">{{ book.title }}</div>
+      <button id="toc-toggle" aria-label="Table of contents">☰</button>
+    </header>
+    <div id="reader-root"></div>
+    <aside id="toc-panel" hidden></aside>
+    <script type="module" src="/static/reader/assets/reader.js"></script>
+  </body>
+</html>

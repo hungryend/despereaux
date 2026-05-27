@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.python-version
+
+# uv
+.uv/
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Env + secrets
+.env
+.env.local
+*.local
+
+# Data + state (mounted volumes in prod)
+/data/
+/config/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+src/despereaux/static/reader/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# Logs
+*.log
