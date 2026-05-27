@@ -6,7 +6,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from despereaux.config import get_settings
 from despereaux.db import session_scope
-from despereaux.models import User
 from despereaux.repos.users import get_or_create_user
 
 settings = get_settings()
@@ -41,9 +40,7 @@ class AuthentikUserMiddleware(BaseHTTPMiddleware):
                 )
 
         async with session_scope() as session:
-            user = await get_or_create_user(
-                session, username=username, email=email, groups=groups
-            )
+            user = await get_or_create_user(session, username=username, email=email, groups=groups)
             request.state.user_id = user.id
             request.state.user_username = user.username
             request.state.user_groups = list(user.authentik_groups or [])

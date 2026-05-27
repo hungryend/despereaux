@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid_utils
-
 from sqlalchemy.orm import DeclarativeBase
 
 

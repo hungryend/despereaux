@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from despereaux.config import get_settings
@@ -73,7 +73,7 @@ async def ingest_file(path: Path) -> tuple[str, str] | None:
 
     file_hash = _hash_file(path)
     stat = path.stat()
-    mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    mtime = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
     size = stat.st_size
 
     async with session_scope() as session:

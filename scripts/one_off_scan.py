@@ -1,5 +1,5 @@
 """Run a one-shot ingest scan from the CLI. Useful in dev:
-    uv run python scripts/one_off_scan.py
+uv run python scripts/one_off_scan.py
 """
 
 from __future__ import annotations

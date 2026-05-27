@@ -54,7 +54,13 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
-ignore = ["E501"]
+ignore = [
+  "E501",   # line length; black/ruff format handles long lines well enough
+  "B008",   # Depends(...) in defaults is THE FastAPI pattern
+]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*.py" = ["I001"]   # auto-generated; don't fight the import order
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

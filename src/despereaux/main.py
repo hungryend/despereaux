@@ -22,6 +22,9 @@ from despereaux.web import routes as web_routes
 
 settings = get_settings()
 
+# Strong refs to fire-and-forget asyncio tasks so the GC doesn't reap them mid-run.
+_background_tasks: set[asyncio.Task] = set()
+
 
 def _configure_logging() -> None:
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -38,8 +41,9 @@ def _configure_logging() -> None:
 
 def _run_migrations() -> None:
     """Run Alembic upgrade head from the project root containing alembic.ini."""
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     project_root = _find_project_root()
     ini_path = project_root / "alembic.ini"
@@ -72,10 +76,14 @@ async def lifespan(app: FastAPI):
 
     # Kick off a one-shot scan in the background; don't block startup.
     if settings.library_path.exists():
-        asyncio.create_task(scanner.run_once())
+        task = asyncio.create_task(scanner.run_once(), name="initial-scan")
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
         scanner.start_watcher()
     else:
-        log.warning("library path %s does not exist; skipping initial scan + watcher", settings.library_path)
+        log.warning(
+            "library path %s does not exist; skipping initial scan + watcher", settings.library_path
+        )
 
     yield
     log.info("shutting down")

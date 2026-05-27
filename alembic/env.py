@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import config + models so autogenerate sees them.
-from despereaux.config import get_settings  # noqa: E402
-from despereaux.models import Base  # noqa: E402
+from despereaux.config import get_settings
+from despereaux.models import Base
 
 config = context.config
 

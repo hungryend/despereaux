@@ -1,0 +1,56 @@
+version: 2
+updates:
+  # Python deps (uv-managed pyproject.toml + uv.lock).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Australia/Brisbane"
+    open-pull-requests-limit: 10
+    labels: ["deps", "python"]
+    groups:
+      python-patches:
+        update-types: ["patch"]
+      python-minor:
+        update-types: ["minor"]
+
+  # Frontend (Vite reader).
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Australia/Brisbane"
+    open-pull-requests-limit: 10
+    labels: ["deps", "frontend"]
+    groups:
+      npm-patches:
+        update-types: ["patch"]
+      npm-minor:
+        update-types: ["minor"]
+
+  # Docker base images (python:3.12-slim, node:22-alpine).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Australia/Brisbane"
+    labels: ["deps", "docker"]
+
+  # GitHub Actions versions in the workflows themselves.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Australia/Brisbane"
+    labels: ["deps", "ci"]
+    groups:
+      actions-all:
+        patterns: ["*"]

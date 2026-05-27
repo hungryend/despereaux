@@ -9,6 +9,7 @@ Both feed the same ingest_file pipeline.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from pathlib import Path
 
@@ -75,10 +76,8 @@ class Scanner:
         if self._watcher_task is None:
             return
         self._watcher_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
             await self._watcher_task
-        except (asyncio.CancelledError, Exception):
-            pass
         self._watcher_task = None
 
     async def _watch_loop(self) -> None:

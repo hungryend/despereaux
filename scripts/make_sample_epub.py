@@ -1,6 +1,6 @@
 """Generate a small synthetic EPUB for local testing.
 
-    uv run python scripts/make_sample_epub.py data/ebooks/sample.epub
+uv run python scripts/make_sample_epub.py data/ebooks/sample.epub
 """
 
 from __future__ import annotations
@@ -28,11 +28,15 @@ def build_sample(out: Path, title: str = "Despereaux Sample") -> None:
     chapters = []
     for i, name in enumerate(["The Burrow", "The Library", "The Threshold"], start=1):
         c = epub.EpubHtml(title=name, file_name=f"chap_{i:02d}.xhtml", lang="en")
-        body = f"<h1>Chapter {i}: {name}</h1>" + (
-            "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-            "Maecenas euismod, libero ut aliquam vehicula, magna ipsum egestas leo, "
-            "id porta neque dolor non urna. Etiam id mi a tortor scelerisque tincidunt.</p>"
-        ) * 8
+        body = (
+            f"<h1>Chapter {i}: {name}</h1>"
+            + (
+                "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                "Maecenas euismod, libero ut aliquam vehicula, magna ipsum egestas leo, "
+                "id porta neque dolor non urna. Etiam id mi a tortor scelerisque tincidunt.</p>"
+            )
+            * 8
+        )
         c.content = f"<html><head><title>{name}</title></head><body>{body}</body></html>"
         book.add_item(c)
         chapters.append(c)

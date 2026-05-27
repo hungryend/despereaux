@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from despereaux.db import get_db
 from despereaux.middleware.auth import current_user
-from despereaux.models import BookAuthor, BookTag
 from despereaux.repos import books as books_repo
 from despereaux.schemas.book import BookDetail, BookSummary, SeriesRead
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +48,11 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         _settings = Settings()
-        for d in (_settings.data_dir, _settings.covers_dir, _settings.cache_dir, _settings.metadata_cache_dir):
+        for d in (
+            _settings.data_dir,
+            _settings.covers_dir,
+            _settings.cache_dir,
+            _settings.metadata_cache_dir,
+        ):
             d.mkdir(parents=True, exist_ok=True)
     return _settings

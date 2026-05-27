@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-05-27
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -25,8 +26,12 @@ def upgrade() -> None:
         sa.Column("username", sa.String(), nullable=False),
         sa.Column("email", sa.String(), nullable=True),
         sa.Column("authentik_groups", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "last_seen_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.UniqueConstraint("username"),
     )
     op.create_index("ix_users_username", "users", ["username"])
@@ -62,7 +67,9 @@ def upgrade() -> None:
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("sort_title", sa.String(), nullable=False),
-        sa.Column("series_id", sa.String(), sa.ForeignKey("series.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "series_id", sa.String(), sa.ForeignKey("series.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("series_index", sa.Float(), nullable=True),
         sa.Column("publisher", sa.String(), nullable=True),
         sa.Column("published_date", sa.Date(), nullable=True),
@@ -82,7 +89,9 @@ def upgrade() -> None:
         sa.Column("openlibrary_id", sa.String(), nullable=True),
         sa.Column("metadata_source", sa.String(), nullable=True),
         sa.Column("last_metadata_fetch_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("added_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "added_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.UniqueConstraint("file_path"),
     )
     op.create_index("ix_books_sort_title", "books", ["sort_title"])
@@ -93,43 +102,75 @@ def upgrade() -> None:
 
     op.create_table(
         "book_authors",
-        sa.Column("book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("author_id", sa.String(), sa.ForeignKey("authors.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+        ),
+        sa.Column(
+            "author_id",
+            sa.String(),
+            sa.ForeignKey("authors.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("role", sa.String(), primary_key=True),
     )
 
     op.create_table(
         "book_tags",
-        sa.Column("book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("tag_id", sa.String(), sa.ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+        ),
+        sa.Column(
+            "tag_id", sa.String(), sa.ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+        ),
     )
 
     op.create_table(
         "reading_progress",
-        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+        ),
+        sa.Column(
+            "book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("position", sa.Text(), nullable=False),
         sa.Column("percent", sa.Float(), nullable=False, server_default="0.0"),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
 
     op.create_table(
         "bookmarks",
         sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("position", sa.Text(), nullable=False),
         sa.Column("label", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index("ix_bookmarks_user_book", "bookmarks", ["user_id", "book_id"])
 
     op.create_table(
         "downloads",
         sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("downloaded_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "user_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "book_id", sa.String(), sa.ForeignKey("books.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "downloaded_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("user_agent", sa.String(), nullable=True),
     )
 

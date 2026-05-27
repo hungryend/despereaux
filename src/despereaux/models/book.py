@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from despereaux.models.base import Base, new_id
 
 
-class MetadataSource(str, enum.Enum):
+class MetadataSource(enum.StrEnum):
     local = "local"
     calibre = "calibre"
     googlebooks = "googlebooks"

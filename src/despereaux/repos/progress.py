@@ -39,9 +39,7 @@ async def upsert_progress(
     await session.execute(stmt)
 
 
-async def list_progress_for_user(
-    session: AsyncSession, *, user_id: str
-) -> list[ReadingProgress]:
+async def list_progress_for_user(session: AsyncSession, *, user_id: str) -> list[ReadingProgress]:
     result = await session.execute(
         select(ReadingProgress).where(ReadingProgress.user_id == user_id)
     )

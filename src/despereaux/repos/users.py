@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ async def get_or_create_user(
 ) -> User:
     result = await session.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if user is None:
         user = User(username=username, email=email, authentik_groups=groups)
         session.add(user)

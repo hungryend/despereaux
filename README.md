@@ -1,5 +1,9 @@
 # despereaux
 
+[![CI](https://github.com/Sipador/despereaux/actions/workflows/ci.yml/badge.svg)](https://github.com/Sipador/despereaux/actions/workflows/ci.yml)
+[![Release](https://github.com/Sipador/despereaux/actions/workflows/release.yml/badge.svg)](https://github.com/Sipador/despereaux/actions/workflows/release.yml)
+[![GHCR](https://img.shields.io/badge/ghcr.io-despereaux-blue?logo=docker)](https://github.com/Sipador/despereaux/pkgs/container/despereaux)
+
 Self-hosted ebook server with predictive page caching. Plex-style library, in-browser reader for EPUB / PDF / CBZ / CBR / MOBI (auto-converted), per-user reading progress, and aggressive page prefetching so swipes are instant.
 
 Designed to drop into a [linuxserver](https://linuxserver.io)-style media-server stack behind SWAG + Authentik forward-auth.
@@ -10,6 +14,37 @@ Designed to drop into a [linuxserver](https://linuxserver.io)-style media-server
 - **Phase 2** — PDF / CBZ / CBR / MOBI conversion + external metadata enrichment
 - **Phase 3** — Direction-aware prefetch queue (the headline feature)
 - **Phase 4** — Bookmarks, full-text search, PWA offline mode
+
+## GitHub setup (one-time)
+
+```bash
+# In the despereaux/ directory, create the remote repo and push.
+gh repo create Sipador/despereaux --public --source=. --remote=origin --push
+# or, if creating the repo via the web UI:
+git remote add origin git@github.com:Sipador/despereaux.git
+git push -u origin main
+```
+
+After the first push, GitHub Actions will run automatically:
+
+- **CI** (`.github/workflows/ci.yml`) — on every PR + push to `main`. Runs ruff lint + format, pytest (with coverage upload), `npm run build` for the frontend, builds the Docker image, scans it with **Trivy** (CRITICAL + HIGH severity, fixable only), and uploads the SARIF to GitHub **Code Scanning** so findings show up in the Security tab.
+- **Release** (`.github/workflows/release.yml`) — on push to `main`, builds and pushes the image to **`ghcr.io/sipador/despereaux:latest`** plus `:sha-<short>`. On a `v*.*.*` git tag, also publishes `:v0.1.0`, `:0.1`, scans the *published* image, and cuts a GitHub Release.
+- **Dependabot** (`.github/dependabot.yml`) — opens weekly PRs for outdated Python (uv), npm, Docker base image, and GitHub Actions versions. Patch + minor bumps are grouped; majors get their own PRs.
+
+Pin to a specific version on the deploy box:
+
+```yaml
+# media-server/docker-compose.yml (already configured to pull from GHCR by default)
+image: ghcr.io/sipador/despereaux:v0.1.0   # or :latest
+```
+
+### CVE response loop
+
+1. Trivy + pip-audit + Dependabot all surface vulnerabilities (Code Scanning, PRs, Security tab).
+2. Merge the Dependabot PR (CI revalidates the image).
+3. Release workflow pushes a new `:latest`.
+4. On the deploy box: `docker compose pull despereaux && docker compose up -d despereaux`.
+   (Or add [Watchtower](https://containrrr.dev/watchtower/) to the stack for automatic rolls — keep it scoped to despereaux only with `WATCHTOWER_LABEL_ENABLE=true` so it doesn't touch Plex/Immich.)
 
 ## Run with Docker (standalone)
 

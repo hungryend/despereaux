@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 from pathlib import Path
@@ -33,10 +34,8 @@ def write_cover(book_id: str, cover_bytes: bytes) -> Path | None:
     except Exception as e:
         log.warning("cover write failed for %s: %s", book_id, e)
         if out.exists():
-            try:
+            with contextlib.suppress(OSError):
                 out.unlink()
-            except OSError:
-                pass
         return None
 
 
