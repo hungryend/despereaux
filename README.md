@@ -13,38 +13,51 @@ Designed to drop into a [linuxserver](https://linuxserver.io)-style media-server
 
 ## Deploy (media-server stack)
 
-Despereaux is wired into the existing [Sipador/media-server](https://github.com/Sipador/media-server) stack:
+Despereaux wires into the existing [Sipador/media-server](https://github.com/Sipador/media-server) stack. Three things have been changed in the media-server checkout:
 
-- The service block is appended to `media-server/docker-compose.yml` (after `audiobookshelf`)
-- `media-server/swag-proxy-confs/despereaux.subdomain.conf` routes `despereaux.sipador.duckdns.org` to the container, gated by Authentik forward-auth
-- `media-server/homepage-config/services.yaml` has a Homepage tile
+1. **`media-server/docker-compose.yml`** — `despereaux` service block appended after `audiobookshelf`. This file IS git-tracked; commit + push when ready.
+2. **`media-server/swag-proxy-confs/despereaux.subdomain.conf`** — routes `despereaux.sipador.duckdns.org`, Authentik-gated. **Not git-tracked** in media-server (the whole `swag-proxy-confs/` folder is untracked) — sync to the deploy box separately.
+3. **`media-server/homepage-config/services.yaml`** — Homepage tile entry. Also **not git-tracked**; sync separately.
 
-On the deploy box (where the media-server stack runs):
+### On the deploy box
 
 ```bash
-# Clone despereaux as a sibling of media-server (the compose's `build: ../despereaux`)
+# 1. Clone despereaux as a sibling of media-server (compose's `build: ../despereaux`)
 cd /path/to/projects
 git clone <despereaux-remote> despereaux
 
-# Pull the media-server changes that wire despereaux in
+# 2. Pull the media-server compose change
 cd media-server
 git pull
 
-# Copy the SWAG conf into the live SWAG config
-cp swag-proxy-confs/despereaux.subdomain.conf ${MOUNT_POINT}/swag/config/nginx/proxy-confs/
+# 3. Drop the SWAG + Homepage configs into the live mount paths.
+#    (These files live only on your dev box — copy them up via scp/rsync first
+#    OR maintain them directly on the deploy box, your call.)
+cp /path/to/despereaux.subdomain.conf ${MOUNT_POINT}/swag/config/nginx/proxy-confs/
+#    Append the despereaux tile to your live services.yaml (see homepage-config/services.yaml for the snippet)
 
-# Copy the updated services.yaml (Homepage dashboard tile)
-cp homepage-config/services.yaml ${MOUNT_POINT}/homepage/config/services.yaml
-
-# Create the persistent data dir for despereaux
+# 4. Create the persistent data dir for despereaux
 mkdir -p ${MOUNT_POINT}/despereaux
 
-# Build + start despereaux, restart swag + homepage
+# 5. Build + start despereaux, reload swag + homepage
 docker compose up -d --build despereaux
 docker compose restart swag homepage
 ```
 
-In Authentik UI: create application `Despereaux`, launch URL `https://despereaux.sipador.duckdns.org`, bind to the existing SWAG forward-auth outpost. Create group `ebook-admin` and add yourself.
+### Authentik
+
+Create application `Despereaux`, launch URL `https://despereaux.sipador.duckdns.org`, bind to the existing SWAG forward-auth outpost. Create group `ebook-admin` and add yourself.
+
+### First scan
+
+Once `despereaux.sipador.duckdns.org` resolves and you can log in, trigger the initial library scan:
+
+```bash
+curl -X POST https://despereaux.sipador.duckdns.org/api/admin/scan \
+  -H "Cookie: <your-authentik-session-cookie>"
+```
+
+Or hit it from a browser via DevTools' fetch console while logged in.
 
 ## Local development
 
