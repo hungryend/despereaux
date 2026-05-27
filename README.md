@@ -11,6 +11,37 @@ Designed to drop into a [linuxserver](https://linuxserver.io)-style media-server
 - **Phase 3** — Direction-aware prefetch queue (the headline feature)
 - **Phase 4** — Bookmarks, full-text search, PWA offline mode
 
+## Run with Docker (standalone)
+
+```bash
+# 1. Point at your real ebook collection (or leave the default ./data/ebooks).
+#    Open docker-compose.yml and edit the LEFT side of:
+#      - ./data/ebooks:/ebooks
+#    Example: change to `- /mnt/nas/Ebooks:/ebooks` or `- D:/Books:/ebooks`.
+
+# 2. (Optional) Set a webhook token + dev-mode in a .env file beside compose.yml:
+cp .env.compose.example .env
+# Edit .env — generate a token if you want chaptarr integration.
+
+# 3. Build + run.
+docker compose up -d --build
+
+# 4. Open http://localhost:8810  (or the host port you set in compose).
+#    With DESPEREAUX_DEV_MODE=true a `devuser` is auto-created in the ebook-admin
+#    group — no Authentik required.
+
+# 5. Trigger a one-shot scan of the library (it also runs automatically at
+#    startup, and the filesystem watcher picks up new files thereafter).
+curl -X POST http://localhost:8810/api/admin/scan
+```
+
+Mounts (full docs inline in `docker-compose.yml`):
+
+| Host path (left) | Container path (right) | What's there |
+|---|---|---|
+| `./data/ebooks` (default) | `/ebooks` | Your `.epub` / `.pdf` / `.cbz` / `.mobi` files. Read-only from despereaux's POV. |
+| `./data/config` (default) | `/config` | SQLite DB, covers, page + metadata caches. Back this up. |
+
 ## Deploy (media-server stack)
 
 Despereaux wires into the existing [Sipador/media-server](https://github.com/Sipador/media-server) stack. Three things have been changed in the media-server checkout:

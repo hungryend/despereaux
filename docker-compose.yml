@@ -1,0 +1,94 @@
+# despereaux — standalone docker-compose
+#
+# Works out of the box with `docker compose up -d --build`, using ./data/ebooks
+# on the host as the library and ./data/config for state.
+#
+# For the media-server-stack deployment pattern (SWAG + Authentik + chaptarr),
+# see the matching block already added to media-server/docker-compose.yml. The
+# differences there are: build path "../despereaux", no host bind to ./data
+# (uses ${MEDIA_MOUNT}/Ebooks and ${MOUNT_POINT}/despereaux instead), and no
+# port publish (SWAG proxies it internally on the docker network).
+
+services:
+  despereaux:
+    build: .
+    container_name: despereaux
+    restart: unless-stopped
+    mem_limit: 1g
+
+    ports:
+      # host:container — change the LEFT side if 8810 collides with something else.
+      - "8810:8000"
+
+    environment:
+      # File ownership inside bind mounts — set to your host user's UID/GID
+      # (`id -u` / `id -g` on Linux/Mac). On Docker Desktop for Windows, 1000
+      # is fine; the file mode is mediated through the VM.
+      - PUID=1000
+      - PGID=1000
+      - TZ=Australia/Brisbane
+
+      # === Library + state paths (inside the container) ===
+      # Match the right-hand side of the volumes below — usually leave these.
+      - DESPEREAUX_LIBRARY_PATH=/ebooks
+      - DESPEREAUX_DATA_DIR=/config
+      - DESPEREAUX_DB_URL=sqlite+aiosqlite:////config/despereaux.db
+
+      # === Auth ===
+      # true  — solo / dev. A `devuser` is auto-created, no Authentik needed.
+      # false — production behind SWAG + Authentik forward-auth.
+      - DESPEREAUX_DEV_MODE=${DESPEREAUX_DEV_MODE:-true}
+      - DESPEREAUX_ADMIN_GROUP=ebook-admin
+
+      # === Webhook for chaptarr / Readarr-style "Custom Script" callers ===
+      # Generate with:  python -c "import secrets; print(secrets.token_urlsafe(32))"
+      # Then add to .env at the project root as DESPEREAUX_WEBHOOK_TOKEN=...
+      # Unset → /api/admin/sync returns 503 and the filesystem watcher is the
+      # only auto-ingest path (which is fine for most setups).
+      - DESPEREAUX_WEBHOOK_TOKEN=${DESPEREAUX_WEBHOOK_TOKEN:-}
+
+      # === External metadata (Phase 2, optional) ===
+      # Free Google Books API key raises the per-IP rate cap; ungated calls
+      # work without one. Get one at https://console.cloud.google.com/.
+      - DESPEREAUX_GOOGLE_BOOKS_API_KEY=${GOOGLE_BOOKS_API_KEY:-}
+
+      - DESPEREAUX_LOG_LEVEL=INFO
+
+    volumes:
+      # ====================================================================
+      # 1) EBOOK LIBRARY — where your .epub / .pdf / .cbz / .mobi files live.
+      #
+      #    Host path (LEFT) → container path (RIGHT — always /ebooks).
+      #    The container only reads from this path; it never moves or renames
+      #    your files. The only writes that touch this path go through
+      #    chaptarr / Calibre / your normal import pipeline.
+      #
+      #    Pick one and edit:
+      #      - ./data/ebooks:/ebooks                        # Default: ./data/ebooks beside this file
+      #      - /mnt/nas/Ebooks:/ebooks                      # Linux NAS mount
+      #      - /Volumes/media/Ebooks:/ebooks                # macOS NAS mount
+      #      - D:/Media/Ebooks:/ebooks                      # Windows (Docker Desktop)
+      #      - ${MEDIA_MOUNT}/Ebooks:/ebooks                # media-server stack pattern
+      # ====================================================================
+      - ./data/ebooks:/ebooks
+
+      # ====================================================================
+      # 2) PERSISTENT STATE — SQLite DB, cover thumbnails, page cache, metadata
+      #    cache. Survives container rebuilds. ~Megabytes for a few thousand
+      #    books; CBZ disk-page cache (Phase 3) can grow to ~5 GB. Back this
+      #    up regularly if you care about reading progress + bookmarks.
+      #
+      #    Layout inside /config:
+      #      /config/despereaux.db        SQLite database
+      #      /config/covers/<id>.webp     600px thumbnails
+      #      /config/cache/<book>/        CBZ page cache (Phase 3)
+      #      /config/metadata-cache/      30-day metadata lookup cache (Phase 2)
+      # ====================================================================
+      - ./data/config:/config
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
