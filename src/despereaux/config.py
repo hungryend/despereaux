@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LibraryConfig(BaseModel):
+    """A named library and its filesystem root inside the container."""
+
+    name: str
+    path: Path
 
 
 class Settings(BaseSettings):
@@ -13,7 +21,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # === Libraries (multi-library support) ===
+    # Set DESPEREAUX_LIBRARIES as JSON, e.g.:
+    #   DESPEREAUX_LIBRARIES='[{"name":"Fiction","path":"/libraries/fiction"},{"name":"D&D","path":"/libraries/dnd"}]'
+    # If unset, falls back to a single library named "Default" pointing at
+    # `library_path` (the legacy single-library env var).
+    libraries: list[LibraryConfig] = []
     library_path: Path = Path("/ebooks")
+
     data_dir: Path = Path("/config")
     db_url: str = "sqlite+aiosqlite:////config/despereaux.db"
 
@@ -21,12 +36,22 @@ class Settings(BaseSettings):
     admin_group: str = "ebook-admin"
 
     # Shared token for /api/admin/sync (chaptarr or other internal callers).
-    # If unset, the sync endpoint returns 503 and the only ingest entry points
-    # are the filesystem watcher + /api/admin/scan (Authentik admin-gated).
     webhook_token: str | None = None
 
     google_books_api_key: str | None = None
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def _resolve_libraries(self) -> Settings:
+        if not self.libraries:
+            # Legacy: derive single "Default" library from library_path
+            self.libraries = [LibraryConfig(name="Default", path=self.library_path)]
+        # Deduplicate by name (last wins).
+        seen: dict[str, LibraryConfig] = {}
+        for lib in self.libraries:
+            seen[lib.name] = lib
+        self.libraries = list(seen.values())
+        return self
 
     @property
     def covers_dir(self) -> Path:

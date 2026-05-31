@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from despereaux.config import get_settings
 from despereaux.db import get_db
 from despereaux.middleware.auth import current_user
 from despereaux.repos import books as books_repo
@@ -24,12 +25,18 @@ async def library(
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
     search: str | None = None,
+    library: str | None = None,
 ):
-    books = await books_repo.list_books(session, limit=500, search=search)
+    settings = get_settings()
+    books = await books_repo.list_books(session, limit=500, search=search, library=library)
     progress_map = {
         p.book_id: p.percent
         for p in await progress_repo.list_progress_for_user(session, user_id=user["id"])
     }
+    counts = await books_repo.count_books_by_library(session)
+    libraries = [
+        {"name": lib.name, "book_count": counts.get(lib.name, 0)} for lib in settings.libraries
+    ]
     return templates.TemplateResponse(
         request,
         "library.html",
@@ -38,6 +45,8 @@ async def library(
             "books": books,
             "progress_map": progress_map,
             "search": search or "",
+            "libraries": libraries,
+            "current_library": library,
         },
     )
 

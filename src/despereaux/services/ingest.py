@@ -57,10 +57,14 @@ def _hash_file(path: Path, chunk: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-async def ingest_file(path: Path) -> tuple[str, str] | None:
+async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str] | None:
     """Returns (book_id, status) where status ∈ {'created', 'updated', 'unchanged', 'skipped'}.
 
     Returns None if the file is not supported.
+
+    `library` tags the book with its logical library name; if the watcher or
+    webhook can't figure out which library a path belongs to, it's resolved via
+    `resolve_library_for_path()` against the configured library roots.
     """
     fmt = detect_format(path)
     if fmt is None:
@@ -103,6 +107,7 @@ async def ingest_file(path: Path) -> tuple[str, str] | None:
         "isbn": meta.isbn,
         "description": meta.description,
         "format": "epub",
+        "library": library,
         "file_path": str(path),
         "file_size": size,
         "file_mtime": mtime,
@@ -136,14 +141,15 @@ async def ingest_file(path: Path) -> tuple[str, str] | None:
     return (book_id, "created" if was_created else "updated")
 
 
-async def ingest_directory(root: Path | None = None) -> dict[str, int]:
+async def ingest_directory(root: Path | None = None, *, library: str = "Default") -> dict[str, int]:
     settings = get_settings()
     base = root or settings.library_path
     counters = {"created": 0, "updated": 0, "unchanged": 0, "skipped": 0, "failed": 0}
     if not base.exists():
-        log.warning("library path does not exist: %s", base)
+        log.warning("library '%s' path does not exist: %s", library, base)
         return counters
 
+    log.info("scanning library '%s' at %s", library, base)
     for path in base.rglob("*"):
         if not path.is_file():
             continue
@@ -151,7 +157,7 @@ async def ingest_directory(root: Path | None = None) -> dict[str, int]:
             counters["skipped"] += 1
             continue
         try:
-            result = await ingest_file(path)
+            result = await ingest_file(path, library=library)
         except Exception as e:
             log.exception("ingest failed for %s: %s", path, e)
             counters["failed"] += 1
@@ -160,5 +166,26 @@ async def ingest_directory(root: Path | None = None) -> dict[str, int]:
             counters["skipped"] += 1
         else:
             counters[result[1]] += 1
-    log.info("scan complete: %s", counters)
+    log.info("library '%s' scan complete: %s", library, counters)
     return counters
+
+
+def resolve_library_for_path(path: Path) -> str:
+    """Figure out which configured library a given on-disk file belongs to.
+
+    Returns the first library whose root contains the path, falling back to
+    "Default" if none match (which happens for stray paths supplied via the
+    webhook outside any configured library).
+    """
+    settings = get_settings()
+    try:
+        rp = path.resolve()
+    except OSError:
+        rp = path
+    for lib in settings.libraries:
+        try:
+            rp.relative_to(lib.path.resolve())
+            return lib.name
+        except ValueError:
+            continue
+    return "Default"

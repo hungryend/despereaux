@@ -31,12 +31,21 @@ class BookSummary(BaseModel):
     title: str
     sort_title: str
     format: str
+    library: str
     page_count: int | None = None
     cover_path: str | None = None
     rating: float | None = None
     series: SeriesRead | None = None
     series_index: float | None = None
     authors: list[str] = []
+
+
+class LibraryRead(BaseModel):
+    """A configured library and its current book count."""
+
+    name: str
+    path: str
+    book_count: int = 0
 
 
 class BookDetail(BookSummary):

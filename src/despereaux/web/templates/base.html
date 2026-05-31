@@ -11,7 +11,19 @@
   <body>
     <header class="top-bar">
       <a class="brand" href="/">despereaux</a>
+      {% if libraries and libraries|length > 1 %}
+        <nav class="library-tabs">
+          <a class="library-tab {% if not current_library %}active{% endif %}" href="/">All</a>
+          {% for lib in libraries %}
+            <a class="library-tab {% if current_library == lib.name %}active{% endif %}"
+               href="/?library={{ lib.name|urlencode }}">
+              {{ lib.name }}<span class="count">{{ lib.book_count }}</span>
+            </a>
+          {% endfor %}
+        </nav>
+      {% endif %}
       <form class="search" method="get" action="/">
+        {% if current_library %}<input type="hidden" name="library" value="{{ current_library }}" />{% endif %}
         <input type="search" name="search" value="{{ search|default('', true) }}" placeholder="Search title or author" />
       </form>
       <div class="user">{{ user.username }}</div>

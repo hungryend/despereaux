@@ -18,10 +18,12 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 @router.post("/scan")
 async def trigger_scan(
     background: BackgroundTasks,
+    library: str | None = None,
     _admin=Depends(require_admin),
 ):
-    background.add_task(scanner.run_once)
-    return {"status": "queued"}
+    """Scan all libraries, or just one if `?library=<name>` is given."""
+    background.add_task(scanner.run_once, library_name=library)
+    return {"status": "queued", "library": library or "all"}
 
 
 @router.get("/scan/status")

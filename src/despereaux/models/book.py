@@ -71,6 +71,9 @@ class Book(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     format: Mapped[str] = mapped_column(String, nullable=False)
+    # Logical library this book belongs to (configured by user; e.g. "Fiction",
+    # "D&D Rules"). Defaults to "Default" for legacy single-library installs.
+    library: Mapped[str] = mapped_column(String, nullable=False, default="Default", index=True)
     file_path: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     file_mtime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

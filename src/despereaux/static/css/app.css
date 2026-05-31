@@ -27,9 +27,10 @@ a:hover { color: var(--accent); }
   padding: 0.75rem 1.25rem;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 .brand { font-weight: 700; letter-spacing: 0.02em; }
-.search { flex: 1; max-width: 480px; }
+.search { flex: 1; min-width: 200px; max-width: 480px; }
 .search input {
   width: 100%; padding: 0.5rem 0.75rem;
   background: var(--bg);
@@ -38,6 +39,35 @@ a:hover { color: var(--accent); }
   border-radius: var(--radius);
 }
 .user { color: var(--fg-dim); font-size: 0.9rem; }
+
+.library-tabs {
+  display: flex; gap: 0.4rem; flex-wrap: wrap;
+}
+.library-tab {
+  padding: 0.4rem 0.75rem;
+  background: var(--bg);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.library-tab:hover { border-color: var(--accent); color: var(--fg); }
+.library-tab.active {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+.library-tab .count {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  min-width: 18px;
+  text-align: center;
+}
+.library-tab.active .count { background: rgba(0, 0, 0, 0.25); }
 
 main { padding: 1.5rem 1.25rem; max-width: 1400px; margin: 0 auto; }
 

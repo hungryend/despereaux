@@ -82,6 +82,7 @@ async def list_books(
     limit: int = 100,
     offset: int = 0,
     search: str | None = None,
+    library: str | None = None,
 ) -> list[Book]:
     stmt = (
         select(Book)
@@ -90,11 +91,22 @@ async def list_books(
         .limit(limit)
         .offset(offset)
     )
+    if library:
+        stmt = stmt.where(Book.library == library)
     if search:
         like = f"%{search.lower()}%"
         stmt = stmt.where(Book.sort_title.ilike(like) | Book.title.ilike(like))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def count_books_by_library(session: AsyncSession) -> dict[str, int]:
+    """Returns {library_name: count} for every library that has books."""
+    from sqlalchemy import func
+
+    stmt = select(Book.library, func.count(Book.id)).group_by(Book.library)
+    result = await session.execute(stmt)
+    return {name: count for name, count in result.all()}
 
 
 async def upsert_book(

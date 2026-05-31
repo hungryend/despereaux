@@ -18,6 +18,7 @@ def _to_summary(book) -> BookSummary:
         title=book.title,
         sort_title=book.sort_title,
         format=book.format,
+        library=book.library,
         page_count=book.page_count,
         cover_path=book.cover_path,
         rating=book.rating,
@@ -55,8 +56,11 @@ async def list_books(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     search: str | None = Query(None),
+    library: str | None = Query(None, description="Filter to a specific library by name"),
 ):
-    rows = await books_repo.list_books(session, limit=limit, offset=offset, search=search)
+    rows = await books_repo.list_books(
+        session, limit=limit, offset=offset, search=search, library=library
+    )
     return [_to_summary(b) for b in rows]
 
 

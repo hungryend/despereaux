@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from despereaux.api import admin as admin_api
 from despereaux.api import books as books_api
+from despereaux.api import libraries as libraries_api
 from despereaux.api import progress as progress_api
 from despereaux.api import stream as stream_api
 from despereaux.config import get_settings
@@ -75,14 +76,22 @@ async def lifespan(app: FastAPI):
     await apply_sqlite_pragmas()
 
     # Kick off a one-shot scan in the background; don't block startup.
-    if settings.library_path.exists():
+    # Skip the scan only if NO configured library exists on disk.
+    library_paths_exist = any(lib.path.exists() for lib in settings.libraries)
+    if library_paths_exist:
         task = asyncio.create_task(scanner.run_once(), name="initial-scan")
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)
         scanner.start_watcher()
+        log.info(
+            "scanner started for %d library(s): %s",
+            len(settings.libraries),
+            ", ".join(f"{lib.name}={lib.path}" for lib in settings.libraries),
+        )
     else:
         log.warning(
-            "library path %s does not exist; skipping initial scan + watcher", settings.library_path
+            "no configured library path exists on disk; skipping scan + watcher (configured: %s)",
+            [str(lib.path) for lib in settings.libraries],
         )
 
     yield
@@ -106,6 +115,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthentikUserMiddleware)
 
     app.include_router(books_api.router)
+    app.include_router(libraries_api.router)
     app.include_router(progress_api.router)
     app.include_router(stream_api.router)
     app.include_router(admin_api.router)
