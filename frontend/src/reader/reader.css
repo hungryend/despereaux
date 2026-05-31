@@ -37,6 +37,47 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   background: var(--bg);
 }
 
+.reader-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 56px;
+  height: 96px;
+  background: rgba(20, 22, 27, 0.85);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 2.6rem;
+  line-height: 1;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  z-index: 11;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  opacity: 0.55;
+  padding: 0 0 6px 0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.reader-nav:hover,
+.reader-nav:focus-visible {
+  opacity: 1;
+  background: rgba(212, 166, 75, 0.18);
+  color: var(--accent);
+  outline: none;
+}
+.reader-nav:active { transform: translateY(-50%) scale(0.95); }
+.reader-nav-prev { left: 14px; }
+.reader-nav-next { right: 14px; }
+
+@media (max-width: 480px) {
+  .reader-nav { width: 44px; height: 72px; font-size: 2rem; }
+  .reader-nav-prev { left: 6px; }
+  .reader-nav-next { right: 6px; }
+}
+
 #toc-panel {
   position: fixed; top: var(--reader-bar-h); right: 0; bottom: 0;
   width: min(360px, 92vw);
