@@ -33,7 +33,13 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 .reader-bar button:hover, .reader-bar .back:hover { color: var(--accent); }
 
 #reader-root {
-  position: fixed; top: var(--reader-bar-h); left: 0; right: 0; bottom: 0;
+  position: fixed;
+  top: var(--reader-bar-h);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 100%;
+  max-width: 900px;     /* readable column on wide screens */
   background: var(--bg);
 }
 

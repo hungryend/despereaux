@@ -27,7 +27,7 @@ export class EpubReader implements Reader {
       width: '100%',
       height: '100%',
       flow: 'paginated',
-      spread: 'auto',
+      spread: 'none', // single page; reader-root is centered + max-widthed via CSS
       allowScriptedContent: false,
     })
 
