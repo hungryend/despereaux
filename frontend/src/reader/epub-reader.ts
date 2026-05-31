@@ -14,7 +14,7 @@ export class EpubReader implements Reader {
   private locationsReady = false
   private lastSavedPercent = -1
 
-  constructor(private bootstrap: BookBootstrap) {
+  constructor(bootstrap: BookBootstrap) {
     this.book = ePub(bootstrap.fileUrl, { openAs: 'epub' })
     this.tracker = new ProgressTracker(bootstrap.progressUrl)
   }

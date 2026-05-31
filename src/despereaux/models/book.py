@@ -96,8 +96,11 @@ class Book(Base):
     )
 
     series = relationship("Series", lazy="joined")
-    authors = relationship("BookAuthor", cascade="all, delete-orphan", lazy="selectin")
-    tags = relationship("BookTag", cascade="all, delete-orphan", lazy="selectin")
+    # lazy="raise" prevents accidental sync-context lazy loads (which throw
+    # MissingGreenlet in async SQLAlchemy). Endpoints that need the M2M data
+    # opt in explicitly via .options(selectinload(...)) in repos/books.py.
+    authors = relationship("BookAuthor", cascade="all, delete-orphan", lazy="raise")
+    tags = relationship("BookTag", cascade="all, delete-orphan", lazy="raise")
 
     __table_args__ = (
         Index("ix_books_series", "series_id", "series_index"),

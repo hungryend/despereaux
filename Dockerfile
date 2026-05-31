@@ -18,10 +18,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 
 # Calibre is baked in for MOBI/AZW conversion + fetch-ebook-metadata enrichment.
-# unrar is needed by the rarfile python package for CBR support.
+# CBR support (Phase 2) will need an unrar-compatible tool — `unrar` moved to
+# Debian non-free in trixie, so we'll add `unar` or `unrar-free` when that
+# phase lands. For Phase 1 (EPUB only) neither is required.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         calibre \
-        unrar \
         libmagic1 \
         libxml2 \
         ca-certificates \
@@ -52,4 +53,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/healthz || exit 1
 
-CMD ["uvicorn", "despereaux.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Single worker: this is an async I/O-bound app and the lifespan owns singleton
+# state (scanner, watcher, background tasks). Multiple workers each run the lifespan,
+# duplicating migrations / scans / watchers and causing SQLAlchemy identity-map
+# races during concurrent ingest. Front with nginx for true parallelism if ever needed.
+CMD ["uvicorn", "despereaux.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

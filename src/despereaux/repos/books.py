@@ -58,6 +58,10 @@ async def _get_or_create_tag(session: AsyncSession, name: str) -> Tag:
 
 
 async def get_book_by_path(session: AsyncSession, file_path: str) -> Book | None:
+    # No selectinload here — upsert_book uses raw DELETE + session.add for the
+    # M2M rows rather than touching the relationship collection, which
+    # avoids both the lazy-load MissingGreenlet trap and the identity-map
+    # warning that comes from loading rows we're about to delete anyway.
     result = await session.execute(select(Book).where(Book.file_path == file_path))
     return result.scalar_one_or_none()
 
@@ -125,7 +129,11 @@ async def upsert_book(
         session.add(book)
         await session.flush()
 
-    # Reset and re-link authors + tags.
+    # Raw SQL DELETE for the M2M rows — bypassing the ORM relationship avoids
+    # the lazy-load MissingGreenlet that async-SQLAlchemy throws when
+    # `lazy="selectin"` relationships are touched outside the load context.
+    # session.add() of fresh rows below works because we never loaded the old
+    # ones into the identity map.
     await session.execute(BookAuthor.__table__.delete().where(BookAuthor.book_id == book.id))
     await session.execute(BookTag.__table__.delete().where(BookTag.book_id == book.id))
 
