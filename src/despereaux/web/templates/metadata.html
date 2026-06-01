@@ -9,9 +9,22 @@
       Current: <strong>{{ book.title }}</strong>{% if current_author %} by {{ current_author }}{% endif %}.
       Pick the matching record below to overwrite metadata + cover. Sources: Google Books, Open Library.
     </p>
-    <form method="post" action="/book/{{ book.id }}/metadata/refresh" class="refresh-form">
-      <button type="submit" class="btn">Refresh from sources</button>
+    <form method="get" action="/book/{{ book.id }}/metadata" class="search-form">
+      <input type="text" name="q" value="{{ query_title }}" placeholder="Search title (overrides book title)" />
+      <input type="text" name="a" value="{{ query_author }}" placeholder="Search author (optional)" />
+      <button type="submit" class="btn">Search</button>
+      <a class="btn btn-ghost" href="/book/{{ book.id }}/metadata">Reset</a>
     </form>
+    <form method="post" action="/book/{{ book.id }}/metadata/refresh" class="refresh-form">
+      <button type="submit" class="btn">Refresh auto-match</button>
+    </form>
+    {% if query_title or query_author %}
+      <div class="search-active">
+        Searching for <strong>{{ query_title or '(book title)' }}</strong>
+        {% if query_author %}by <strong>{{ query_author }}</strong>{% endif %}
+        — results below are <em>not cached</em>; refine your search until the right book shows up.
+      </div>
+    {% endif %}
   </header>
 
   {% if not candidates %}

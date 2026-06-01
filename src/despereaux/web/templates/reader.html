@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <meta name="color-scheme" content="dark light" />
     <title>{{ book.title }} — despereaux</title>
-    <link rel="stylesheet" href="/static/reader/assets/reader.css" />
+    <link rel="stylesheet" href="/static/reader/assets/reader.css?v={{ asset_version }}" />
     <script>
       window.DESPEREAUX_BOOK = {
         id: {{ book.id|tojson }},
@@ -28,6 +28,6 @@
     <button id="reader-prev" class="reader-nav reader-nav-prev" aria-label="Previous page" title="Previous (← key, swipe right)">‹</button>
     <button id="reader-next" class="reader-nav reader-nav-next" aria-label="Next page" title="Next (→ key, space, swipe left)">›</button>
     <aside id="toc-panel" hidden></aside>
-    <script type="module" src="/static/reader/assets/reader.js"></script>
+    <script type="module" src="/static/reader/assets/reader.js?v={{ asset_version }}"></script>
   </body>
 </html>

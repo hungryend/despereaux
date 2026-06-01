@@ -13,10 +13,24 @@ from despereaux.middleware.auth import current_user
 from despereaux.repos import books as books_repo
 from despereaux.repos import progress as progress_repo
 from despereaux.services.metadata_apply import apply_candidate
-from despereaux.services.metadata_lookup import get_candidates_for
+from despereaux.services.metadata_lookup import find_candidates, get_candidates_for
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+# Use the bundled reader.js mtime as a cache-busting version stamp. Hashing
+# would be more accurate but every static-file response already ships an
+# ETag, so this just protects against the browser using a heuristic stale
+# copy — mtime is plenty.
+def _asset_version() -> str:
+    bundle = (
+        Path(__file__).parent.parent / "static" / "reader" / "assets" / "reader.js"
+    )
+    try:
+        return str(int(bundle.stat().st_mtime))
+    except OSError:
+        return "0"
 
 router = APIRouter(include_in_schema=False)
 
@@ -84,12 +98,23 @@ async def edit_metadata(
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
     refresh: bool = False,
+    q: str | None = None,
+    a: str | None = None,
 ):
+    """Picker. With no q/a, queries auto-derived from local title + first author.
+    With q/a, the user's keyword search overrides — bypasses cache and doesn't
+    write the result back to the per-book cache (so a bad query doesn't
+    poison the auto-cache for next time)."""
     book = await books_repo.get_book(session, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
     author = book.authors[0].author.name if book.authors else None
-    candidates = await get_candidates_for(book.id, book.title, author, force_refresh=refresh)
+
+    if q or a:
+        # Manual keyword query — go straight to the live APIs, no cache.
+        candidates = await find_candidates(q or book.title, a or author)
+    else:
+        candidates = await get_candidates_for(book.id, book.title, author, force_refresh=refresh)
     return templates.TemplateResponse(
         request,
         "metadata.html",
@@ -98,6 +123,8 @@ async def edit_metadata(
             "book": book,
             "current_author": author,
             "candidates": candidates,
+            "query_title": q or "",
+            "query_author": a or "",
         },
     )
 
@@ -155,5 +182,6 @@ async def read_book(
             "user": user,
             "book": book,
             "effective_format": effective_format,
+            "asset_version": _asset_version(),
         },
     )

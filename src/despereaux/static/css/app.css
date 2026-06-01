@@ -160,6 +160,30 @@ main { padding: 1.5rem 1.25rem; max-width: 1400px; margin: 0 auto; }
   padding: 3rem 1rem; text-align: center; color: var(--fg-dim);
   background: var(--bg-elev); border-radius: var(--radius);
 }
+.metadata-picker .search-form {
+  display: flex; gap: 0.5rem; flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+.metadata-picker .search-form input[type="text"] {
+  flex: 1; min-width: 220px;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.metadata-picker .search-form input[type="text"]:focus {
+  outline: none; border-color: var(--accent);
+}
+.metadata-picker .btn-ghost {
+  background: transparent;
+}
+.metadata-picker .search-active {
+  padding: 0.6rem 0.9rem; margin: 0.5rem 0 1rem;
+  background: rgba(212, 166, 75, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+.metadata-picker .search-active em { color: var(--fg-dim); font-style: italic; }
 
 .candidate-grid {
   display: grid;
