@@ -29,7 +29,24 @@ a:hover { color: var(--accent); }
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }
-.brand { font-weight: 700; letter-spacing: 0.02em; }
+.brand {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  font-weight: 700; letter-spacing: 0.02em;
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+.brand:hover { color: var(--fg); }
+.brand-logo {
+  width: 32px; height: 32px;
+  display: block;
+  /* slight gold glow on hover */
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+.brand:hover .brand-logo {
+  filter: drop-shadow(0 0 6px rgba(212, 166, 75, 0.45));
+}
+.brand-text { color: var(--fg); }
 .search { flex: 1; min-width: 200px; max-width: 480px; }
 .search input {
   width: 100%; padding: 0.5rem 0.75rem;
