@@ -1,5 +1,6 @@
 import './reader.css'
 import { EpubReader } from './epub-reader'
+import { PdfReader } from './pdf-reader'
 import type { Reader } from './types'
 
 async function bootstrap(): Promise<void> {
@@ -15,9 +16,11 @@ async function bootstrap(): Promise<void> {
       reader = new EpubReader(cfg)
       break
     case 'pdf':
+      reader = new PdfReader(cfg)
+      break
     case 'cbz':
     case 'cbr':
-      renderUnsupported(`${cfg.format.toUpperCase()} reader arrives in Phase 2.`)
+      renderUnsupported(`${cfg.format.toUpperCase()} reader arrives in Phase 2.3.`)
       return
     default:
       renderUnsupported(`Unsupported format: ${cfg.format}`)

@@ -1,9 +1,19 @@
-"""Per-file ingest pipeline."""
+"""Per-file ingest pipeline.
+
+Format dispatch:
+  .epub                       → native EPUB
+  .mobi / .azw / .azw3        → convert to EPUB via Calibre, store original + converted
+  .pdf                        → native PDF (reader uses PDF.js on the frontend)
+
+All paths converge on a single upsert through `_finalise_ingest()` so DB writes
+and cover handling stay consistent.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,15 +24,14 @@ from despereaux.repos.books import get_book_by_path, upsert_book
 from despereaux.services.converter import convert_to_epub
 from despereaux.services.covers import write_cover
 from despereaux.services.metadata.epub import estimate_page_count, read_epub_metadata
+from despereaux.services.metadata.pdf import read_pdf_metadata
 
 log = logging.getLogger(__name__)
 
-# Formats we can ingest. EPUB is native; MOBI/AZW/AZW3 are auto-converted to
-# EPUB at ingest via Calibre (see services/converter.py). PDF / CBZ / CBR
-# are Phase 2.2+.
 NATIVE_EPUB_EXTS = {".epub"}
 CONVERTIBLE_TO_EPUB_EXTS = {".mobi", ".azw", ".azw3"}
-SUPPORTED_EXTS = NATIVE_EPUB_EXTS | CONVERTIBLE_TO_EPUB_EXTS
+NATIVE_PDF_EXTS = {".pdf"}
+SUPPORTED_EXTS = NATIVE_EPUB_EXTS | CONVERTIBLE_TO_EPUB_EXTS | NATIVE_PDF_EXTS
 
 
 def detect_format(path: Path) -> str | None:
@@ -35,6 +44,8 @@ def detect_format(path: Path) -> str | None:
         return "azw"
     if ext == ".azw3":
         return "azw3"
+    if ext in NATIVE_PDF_EXTS:
+        return "pdf"
     return None
 
 
@@ -42,10 +53,27 @@ def is_supported(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_EXTS
 
 
+@dataclass
+class _ExtractedMeta:
+    """Format-agnostic intermediate representation produced by per-format extractors."""
+
+    title: str
+    authors: list[str] = field(default_factory=list)
+    publisher: str | None = None
+    published_date: str | None = None
+    language: str | None = None
+    description: str | None = None
+    isbn: str | None = None
+    series: tuple[str, float] | None = None
+    tags: list[str] = field(default_factory=list)
+    page_count: int | None = None
+    cover_bytes: bytes | None = None
+    converted_path: Path | None = None  # for MOBI/AZW: where the .epub now lives
+
+
 def _parse_pub_date(value: str | None):
     if not value:
         return None
-    # EPUB dates can be plain "2019", "2019-01", "2019-01-23", or full ISO timestamps.
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
     except ValueError:
@@ -69,60 +97,117 @@ def _hash_file(path: Path, chunk: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
+async def _extract_epub(path: Path) -> _ExtractedMeta | None:
+    try:
+        m = read_epub_metadata(path)
+    except Exception as e:
+        log.warning("EPUB metadata extraction failed for %s: %s", path, e)
+        return None
+    return _ExtractedMeta(
+        title=m.title,
+        authors=m.authors,
+        publisher=m.publisher,
+        published_date=m.published_date,
+        language=m.language,
+        description=m.description,
+        isbn=m.isbn,
+        series=m.series,
+        tags=m.tags,
+        page_count=estimate_page_count(path),
+        cover_bytes=m.cover_bytes,
+    )
+
+
+async def _extract_mobi(path: Path, file_hash: str) -> _ExtractedMeta | None:
+    """Convert via Calibre to EPUB, then extract metadata from the result."""
+    settings = get_settings()
+    converted = settings.converted_dir / f"{file_hash}.epub"
+    result = await convert_to_epub(path, converted)
+    if result is None:
+        log.warning("skipping %s: conversion to EPUB failed", path.name)
+        return None
+    meta = await _extract_epub(result)
+    if meta is None:
+        return None
+    meta.converted_path = converted
+    return meta
+
+
+async def _extract_pdf(path: Path) -> _ExtractedMeta | None:
+    try:
+        m = read_pdf_metadata(path)
+    except Exception as e:
+        log.warning("PDF metadata extraction failed for %s: %s", path, e)
+        return None
+    return _ExtractedMeta(
+        title=m.title,
+        authors=m.authors,
+        publisher=m.publisher,
+        published_date=m.published_date,
+        language=m.language,
+        description=m.description,
+        isbn=m.isbn,
+        series=m.series,
+        tags=m.tags,
+        page_count=m.page_count or None,
+        cover_bytes=m.cover_bytes,
+    )
+
+
 async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str] | None:
-    """Returns (book_id, status) where status ∈ {'created', 'updated', 'unchanged', 'skipped'}.
+    """Returns (book_id, status) where status ∈ {'created', 'updated', 'unchanged'}.
 
-    Returns None if the file is not supported.
-
-    `library` tags the book with its logical library name; if the watcher or
-    webhook can't figure out which library a path belongs to, it's resolved via
-    `resolve_library_for_path()` against the configured library roots.
+    Returns None if the file is unsupported, missing, or fails extraction.
     """
     fmt = detect_format(path)
     if fmt is None:
         return None
     if not path.is_file():
         return None
-    # Normalise to an absolute, resolved path so the watcher (absolute) and the webhook
-    # (often relative) don't create duplicate rows for the same file.
+    # Resolve to absolute path so watcher (absolute) + webhook (often relative)
+    # don't create duplicate rows for the same file.
     path = path.resolve()
 
     file_hash = _hash_file(path)
+
+    async with session_scope() as session:
+        existing = await get_book_by_path(session, str(path))
+        # Hash is the truth — mtime float-precision round-trip flakes.
+        if existing and existing.file_hash == file_hash:
+            return (existing.id, "unchanged")
+
+    # Per-format extraction.
+    if fmt == "epub":
+        meta = await _extract_epub(path)
+    elif fmt in {"mobi", "azw", "azw3"}:
+        meta = await _extract_mobi(path, file_hash)
+    elif fmt == "pdf":
+        meta = await _extract_pdf(path)
+    else:
+        return None
+
+    if meta is None:
+        return None
+
+    return await _finalise_ingest(
+        path=path, file_hash=file_hash, fmt=fmt, library=library, meta=meta
+    )
+
+
+async def _finalise_ingest(
+    *,
+    path: Path,
+    file_hash: str,
+    fmt: str,
+    library: str,
+    meta: _ExtractedMeta,
+) -> tuple[str, str]:
     stat = path.stat()
     mtime = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
     size = stat.st_size
 
-    async with session_scope() as session:
-        existing = await get_book_by_path(session, str(path))
-        # Hash is the truth (content unchanged). mtime is just for indexing —
-        # comparing it loses to float-precision round-trip through SQLite.
-        if existing and existing.file_hash == file_hash:
-            return (existing.id, "unchanged")
-
-    # For non-EPUB formats, convert to EPUB once and cache by hash so re-ingest
-    # doesn't pay the Calibre cost again. The original `path` is preserved on
-    # disk + in DB (so /download serves the original), while metadata extraction
-    # and the in-browser reader use the converted EPUB.
-    converted_path: Path | None = None
-    epub_for_metadata = path
-    if path.suffix.lower() in CONVERTIBLE_TO_EPUB_EXTS:
-        settings = get_settings()
-        converted_path = settings.converted_dir / f"{file_hash}.epub"
-        converted = await convert_to_epub(path, converted_path)
-        if converted is None:
-            log.warning("skipping %s: conversion to EPUB failed", path.name)
-            return None
-        epub_for_metadata = converted
-
-    try:
-        meta = read_epub_metadata(epub_for_metadata)
-    except Exception as e:
-        log.warning("metadata extraction failed for %s: %s", path, e)
-        return None
-
     title = meta.title or path.stem
     sort_title = title.removeprefix("The ").removeprefix("A ").removeprefix("An ").strip() or title
-    pages = estimate_page_count(epub_for_metadata)
 
     series_name = meta.series[0] if meta.series else None
     series_idx = meta.series[1] if meta.series else None
@@ -135,17 +220,16 @@ async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str
         "language": meta.language,
         "isbn": meta.isbn,
         "description": meta.description,
-        "format": fmt,  # original format: 'epub', 'mobi', 'azw', 'azw3'
+        "format": fmt,
         "library": library,
         "file_path": str(path),
         "file_size": size,
         "file_mtime": mtime,
         "file_hash": file_hash,
-        "page_count": pages,
-        # Don't include cover_path here — it's written by a separate async step
-        # after this block, and overwriting it to None on every upsert wipes
-        # the existing cover before the next write can re-create it.
-        "converted_path": str(converted_path) if converted_path else None,
+        "page_count": meta.page_count,
+        # Not setting cover_path here — it's written by a separate step
+        # below and including it would wipe existing covers on every upsert.
+        "converted_path": str(meta.converted_path) if meta.converted_path else None,
         "metadata_source": MetadataSource.local,
     }
 
@@ -204,12 +288,7 @@ async def ingest_directory(root: Path | None = None, *, library: str = "Default"
 
 
 def resolve_library_for_path(path: Path) -> str:
-    """Figure out which configured library a given on-disk file belongs to.
-
-    Returns the first library whose root contains the path, falling back to
-    "Default" if none match (which happens for stray paths supplied via the
-    webhook outside any configured library).
-    """
+    """Figure out which configured library a given on-disk file belongs to."""
     settings = get_settings()
     try:
         rp = path.resolve()

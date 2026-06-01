@@ -107,3 +107,25 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   display: flex; align-items: center; justify-content: center;
   height: 100%; color: var(--fg-dim); padding: 2rem; text-align: center;
 }
+
+/* PDF mode: canvas-based, fit-to-window, centered. */
+#reader-root.pdf-mode {
+  max-width: none;
+  width: 100%;
+  left: 0;
+  right: 0;
+  transform: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #15171c;
+}
+.pdf-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  background: white;
+}
