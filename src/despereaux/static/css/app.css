@@ -176,6 +176,69 @@ main { padding: 1.5rem 1.25rem; max-width: 1400px; margin: 0 auto; }
 }
 .duplicates .hint { font-size: 0.85rem; color: var(--fg-dim); margin: 0.5rem 0 0; }
 
+/* Parent / child book relationship */
+.parent-link {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  color: var(--fg-dim);
+}
+.parent-link a { color: var(--accent); }
+.parent-link .asset-label {
+  padding: 1px 8px; background: var(--accent); color: var(--accent-fg);
+  border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+}
+.btn-link {
+  background: transparent; border: none; color: var(--fg-dim);
+  cursor: pointer; padding: 0; font-size: 0.85rem; text-decoration: underline;
+}
+.btn-link:hover { color: var(--accent); }
+
+.children {
+  margin: 2rem 0 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.children h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+.asset-list { list-style: none; padding: 0; margin: 0; }
+.asset-list li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.asset-list li:last-child { border-bottom: none; }
+.asset-main { flex: 1; min-width: 0; }
+.asset-title { color: var(--fg); font-size: 0.95rem; }
+.asset-title:hover { color: var(--accent); }
+.asset-meta { color: var(--fg-dim); font-size: 0.8rem; margin-top: 2px; }
+.asset-actions { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.btn-small { padding: 0.35rem 0.7rem; font-size: 0.82rem; }
+.btn-ghost {
+  background: transparent;
+  color: var(--fg-dim);
+}
+.btn-ghost:hover { color: var(--accent); }
+
+.asset-label-input {
+  display: block; margin-top: 0.5rem;
+  font-size: 0.78rem; color: var(--fg-dim);
+}
+.asset-label-input input {
+  display: block; width: 100%;
+  margin-top: 2px;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 0.85rem;
+}
+
 /* Metadata picker */
 .metadata-picker .picker-header {
   margin-bottom: 1.5rem;

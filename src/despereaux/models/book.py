@@ -102,6 +102,16 @@ class Book(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Parent/asset relationship — children are extra files (maps, handouts,
+    # supplements) attached to a main book. Children don't appear in the
+    # library grid; they're listed on the parent's detail page.
+    parent_book_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Free-form display label for the asset shown on the parent's page
+    # (e.g. "Maps", "Death House handout", "Pre-gen characters").
+    asset_label: Mapped[str | None] = mapped_column(String, nullable=True)
+
     series = relationship("Series", lazy="joined")
     # lazy="raise" prevents accidental sync-context lazy loads (which throw
     # MissingGreenlet in async SQLAlchemy). Endpoints that need the M2M data

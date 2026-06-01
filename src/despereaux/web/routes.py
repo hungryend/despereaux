@@ -29,13 +29,12 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # ETag, so this just protects against the browser using a heuristic stale
 # copy — mtime is plenty.
 def _asset_version() -> str:
-    bundle = (
-        Path(__file__).parent.parent / "static" / "reader" / "assets" / "reader.js"
-    )
+    bundle = Path(__file__).parent.parent / "static" / "reader" / "assets" / "reader.js"
     try:
         return str(int(bundle.stat().st_mtime))
     except OSError:
         return "0"
+
 
 router = APIRouter(include_in_schema=False)
 
@@ -84,6 +83,10 @@ async def book_detail(
         raise HTTPException(status_code=404, detail="book not found")
     prog = await progress_repo.get_progress(session, user_id=user["id"], book_id=book_id)
     duplicates = await books_repo.find_duplicates(session, book)
+    children = await books_repo.get_children(session, book.id)
+    parent = (
+        await books_repo.get_book(session, book.parent_book_id) if book.parent_book_id else None
+    )
     return templates.TemplateResponse(
         request,
         "book.html",
@@ -94,6 +97,8 @@ async def book_detail(
             "tags": [bt.tag.name for bt in (book.tags or [])],
             "progress": prog,
             "duplicates": duplicates,
+            "children": children,
+            "parent": parent,
         },
     )
 
@@ -134,6 +139,62 @@ async def edit_metadata(
             "query_author": a or "",
         },
     )
+
+
+@router.get("/book/{book_id}/attach", response_class=HTMLResponse)
+async def attach_picker(
+    book_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+    q: str | None = None,
+):
+    """Picker for selecting a parent book to attach the current book under as
+    an asset. Searches across top-level books, excluding the book being
+    attached."""
+    book = await books_repo.get_book(session, book_id)
+    if not book:
+        raise HTTPException(status_code=404, detail="book not found")
+    # Search for potential parents — exclude this book + its current children.
+    raw = await books_repo.list_books(session, limit=100, search=q)
+    candidates = [b for b in raw if b.id != book.id and b.parent_book_id is None]
+    return templates.TemplateResponse(
+        request,
+        "attach.html",
+        {
+            "user": user,
+            "book": book,
+            "candidates": candidates,
+            "query": q or "",
+        },
+    )
+
+
+@router.post("/book/{book_id}/attach")
+async def attach_to(
+    book_id: str,
+    parent_id: str = Form(...),
+    asset_label: str = Form(""),
+    _user=Depends(current_user),
+):
+    async with session_scope() as session:
+        ok = await books_repo.attach_to_parent(
+            session, child_id=book_id, parent_id=parent_id, label=asset_label
+        )
+    if not ok:
+        raise HTTPException(
+            status_code=400, detail="couldn't attach (parent missing or would cycle)"
+        )
+    # Land on the parent so the user sees the asset they just attached.
+    return RedirectResponse(url=f"/book/{parent_id}", status_code=303)
+
+
+@router.post("/book/{book_id}/detach")
+async def detach_from(book_id: str, _user=Depends(current_user)):
+    async with session_scope() as session:
+        await books_repo.detach_from_parent(session, book_id)
+    # The detached book is now a top-level book again; show it.
+    return RedirectResponse(url=f"/book/{book_id}", status_code=303)
 
 
 @router.post("/book/{book_id}/delete")
@@ -178,9 +239,9 @@ async def select_metadata(
 
 async def _resolve_candidate(book, source: str, external_id: str, *, q: str | None, a: str | None):
     """Find the user-selected candidate, trying (cheap → expensive):
-      1. Per-book auto-match cache (cheap, in-process)
-      2. Re-run the same search the user did (q/a if manual, else book defaults)
-      3. Direct-by-ID fetch from the source API (canonical, slowest)
+    1. Per-book auto-match cache (cheap, in-process)
+    2. Re-run the same search the user did (q/a if manual, else book defaults)
+    3. Direct-by-ID fetch from the source API (canonical, slowest)
     """
     from despereaux.services.metadata_lookup import find_candidates as _find  # noqa: F401
 

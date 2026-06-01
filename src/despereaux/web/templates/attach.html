@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Attach "{{ book.title }}" to a parent book{% endblock %}
+{% block content %}
+<div class="metadata-picker">
+  <header class="picker-header">
+    <a class="back" href="/book/{{ book.id }}">← Back to "{{ book.title }}"</a>
+    <h1>Attach as an asset of…</h1>
+    <p class="hint">
+      Choose a parent book. <strong>{{ book.title }}</strong> will become its
+      asset (maps, handout, supplement, etc.) and disappear from the library
+      grid — you'll still read or download it from the parent's detail page.
+    </p>
+    <form method="get" action="/book/{{ book.id }}/attach" class="search-form">
+      <input type="text" name="q" value="{{ query }}" placeholder="Search library by title or author" />
+      <button type="submit" class="btn">Search</button>
+    </form>
+  </header>
+
+  {% if not candidates %}
+    <div class="empty">
+      <p>No matching top-level books. Try a different search, or
+      <a href="/">browse the library</a>.</p>
+    </div>
+  {% else %}
+    <div class="candidate-grid">
+      {% for c in candidates %}
+        {% set authors = c.authors|map(attribute='author')|map(attribute='name')|list %}
+        <form method="post" action="/book/{{ book.id }}/attach" class="candidate-card">
+          <input type="hidden" name="parent_id" value="{{ c.id }}" />
+          <div class="cover">
+            {% if c.cover_path %}
+              <img src="/api/books/{{ c.id }}/cover" alt="" loading="lazy" />
+            {% else %}
+              <div class="no-cover">{{ c.title[:1]|upper }}</div>
+            {% endif %}
+          </div>
+          <div class="meta">
+            <div class="title">{{ c.title }}</div>
+            {% if authors %}<div class="authors">{{ authors|join(', ') }}</div>{% endif %}
+            <div class="line">
+              <span>{{ c.format|upper }}</span>
+              {% if c.page_count %}<span>{{ c.page_count }}p</span>{% endif %}
+            </div>
+            <label class="asset-label-input">
+              Label (optional):
+              <input type="text" name="asset_label" placeholder="e.g. Maps, Handout, Pre-gens" />
+            </label>
+          </div>
+          <button type="submit" class="apply">Attach here</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

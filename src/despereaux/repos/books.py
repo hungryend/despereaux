@@ -87,7 +87,11 @@ async def list_books(
     offset: int = 0,
     search: str | None = None,
     library: str | None = None,
+    include_children: bool = False,
 ) -> list[Book]:
+    """List top-level books (parent_book_id IS NULL). Children/assets are
+    hidden from the library grid by default; set include_children=True to
+    include them (used by the attach picker)."""
     stmt = (
         select(Book)
         .options(selectinload(Book.authors).selectinload(BookAuthor.author))
@@ -95,6 +99,8 @@ async def list_books(
         .limit(limit)
         .offset(offset)
     )
+    if not include_children:
+        stmt = stmt.where(Book.parent_book_id.is_(None))
     if library:
         stmt = stmt.where(Book.library == library)
     if search:
@@ -102,6 +108,51 @@ async def list_books(
         stmt = stmt.where(Book.sort_title.ilike(like) | Book.title.ilike(like))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_children(session: AsyncSession, parent_id: str) -> list[Book]:
+    """Books attached as assets to the given parent book."""
+    stmt = (
+        select(Book)
+        .where(Book.parent_book_id == parent_id)
+        .options(selectinload(Book.authors).selectinload(BookAuthor.author))
+        .order_by(Book.asset_label.nulls_last(), Book.sort_title)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def attach_to_parent(
+    session: AsyncSession,
+    *,
+    child_id: str,
+    parent_id: str,
+    label: str | None,
+) -> bool:
+    """Make `child_id` an asset of `parent_id`. Returns False if either book
+    is missing OR if you'd be creating a parent cycle (child == parent OR
+    parent already a descendant of child)."""
+    if child_id == parent_id:
+        return False
+    child = await get_book(session, child_id)
+    parent = await get_book(session, parent_id)
+    if child is None or parent is None:
+        return False
+    # Don't allow attaching to a child of yourself (one-level deep cycle).
+    if parent.parent_book_id == child_id:
+        return False
+    child.parent_book_id = parent_id
+    child.asset_label = (label or "").strip() or None
+    return True
+
+
+async def detach_from_parent(session: AsyncSession, child_id: str) -> bool:
+    child = await get_book(session, child_id)
+    if child is None:
+        return False
+    child.parent_book_id = None
+    child.asset_label = None
+    return True
 
 
 async def find_duplicates(session: AsyncSession, book: Book) -> list[Book]:
@@ -131,10 +182,15 @@ async def find_duplicates(session: AsyncSession, book: Book) -> list[Book]:
 
 
 async def count_books_by_library(session: AsyncSession) -> dict[str, int]:
-    """Returns {library_name: count} for every library that has books."""
+    """Returns {library_name: count} for every library that has books. Only
+    counts top-level books (children/assets aren't shown in the grid)."""
     from sqlalchemy import func
 
-    stmt = select(Book.library, func.count(Book.id)).group_by(Book.library)
+    stmt = (
+        select(Book.library, func.count(Book.id))
+        .where(Book.parent_book_id.is_(None))
+        .group_by(Book.library)
+    )
     result = await session.execute(stmt)
     return {name: count for name, count in result.all()}
 
