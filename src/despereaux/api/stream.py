@@ -46,11 +46,19 @@ async def serve_file(
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
 
-    path = Path(book.file_path)
+    # If the source format needed conversion (MOBI/AZW -> EPUB), serve the
+    # converted file to the reader. Download still serves the original below.
+    if book.converted_path:
+        path = Path(book.converted_path)
+        served_format = "epub"
+    else:
+        path = Path(book.file_path)
+        served_format = book.format
+
     if not path.exists():
         raise HTTPException(status_code=410, detail="file missing on disk")
 
-    etag = _build_etag(book.file_hash)
+    etag = _build_etag(book.file_hash + (":epub" if book.converted_path else ""))
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
 
@@ -59,7 +67,7 @@ async def serve_file(
         "Cache-Control": "public, max-age=31536000, immutable",
         "Accept-Ranges": "bytes",
     }
-    media_type = _MIME.get(book.format, "application/octet-stream")
+    media_type = _MIME.get(served_format, "application/octet-stream")
     # FileResponse handles Range requests natively via Starlette.
     # No filename= here — we don't want Content-Disposition: attachment on the in-browser read path.
     return FileResponse(path, media_type=media_type, headers=headers)
@@ -143,7 +151,10 @@ async def book_manifest(
         "id": book.id,
         "title": book.title,
         "format": book.format,
+        # `served_format` is what /file actually returns — 'epub' for converted
+        # MOBI/AZW, original format otherwise. The reader uses this to pick its
+        # rendering engine.
+        "served_format": "epub" if book.converted_path else book.format,
         "page_count": book.page_count,
         "file_hash": book.file_hash,
-        # epub.js will fetch the actual spine + TOC from /file; this is just metadata for boot.
     }

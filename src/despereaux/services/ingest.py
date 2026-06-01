@@ -11,18 +11,30 @@ from despereaux.config import get_settings
 from despereaux.db import session_scope
 from despereaux.models import MetadataSource
 from despereaux.repos.books import get_book_by_path, upsert_book
+from despereaux.services.converter import convert_to_epub
 from despereaux.services.covers import write_cover
 from despereaux.services.metadata.epub import estimate_page_count, read_epub_metadata
 
 log = logging.getLogger(__name__)
 
-SUPPORTED_EXTS = {".epub"}  # Phase 1; Phase 2 adds .pdf, .cbz, .cbr, .mobi, .azw, .azw3
+# Formats we can ingest. EPUB is native; MOBI/AZW/AZW3 are auto-converted to
+# EPUB at ingest via Calibre (see services/converter.py). PDF / CBZ / CBR
+# are Phase 2.2+.
+NATIVE_EPUB_EXTS = {".epub"}
+CONVERTIBLE_TO_EPUB_EXTS = {".mobi", ".azw", ".azw3"}
+SUPPORTED_EXTS = NATIVE_EPUB_EXTS | CONVERTIBLE_TO_EPUB_EXTS
 
 
 def detect_format(path: Path) -> str | None:
     ext = path.suffix.lower()
-    if ext == ".epub":
+    if ext in NATIVE_EPUB_EXTS:
         return "epub"
+    if ext == ".mobi":
+        return "mobi"
+    if ext == ".azw":
+        return "azw"
+    if ext == ".azw3":
+        return "azw3"
     return None
 
 
@@ -82,18 +94,35 @@ async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str
 
     async with session_scope() as session:
         existing = await get_book_by_path(session, str(path))
-        if existing and existing.file_hash == file_hash and existing.file_mtime == mtime:
+        # Hash is the truth (content unchanged). mtime is just for indexing —
+        # comparing it loses to float-precision round-trip through SQLite.
+        if existing and existing.file_hash == file_hash:
             return (existing.id, "unchanged")
 
+    # For non-EPUB formats, convert to EPUB once and cache by hash so re-ingest
+    # doesn't pay the Calibre cost again. The original `path` is preserved on
+    # disk + in DB (so /download serves the original), while metadata extraction
+    # and the in-browser reader use the converted EPUB.
+    converted_path: Path | None = None
+    epub_for_metadata = path
+    if path.suffix.lower() in CONVERTIBLE_TO_EPUB_EXTS:
+        settings = get_settings()
+        converted_path = settings.converted_dir / f"{file_hash}.epub"
+        converted = await convert_to_epub(path, converted_path)
+        if converted is None:
+            log.warning("skipping %s: conversion to EPUB failed", path.name)
+            return None
+        epub_for_metadata = converted
+
     try:
-        meta = read_epub_metadata(path)
+        meta = read_epub_metadata(epub_for_metadata)
     except Exception as e:
         log.warning("metadata extraction failed for %s: %s", path, e)
         return None
 
     title = meta.title or path.stem
     sort_title = title.removeprefix("The ").removeprefix("A ").removeprefix("An ").strip() or title
-    pages = estimate_page_count(path)
+    pages = estimate_page_count(epub_for_metadata)
 
     series_name = meta.series[0] if meta.series else None
     series_idx = meta.series[1] if meta.series else None
@@ -106,13 +135,17 @@ async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str
         "language": meta.language,
         "isbn": meta.isbn,
         "description": meta.description,
-        "format": "epub",
+        "format": fmt,  # original format: 'epub', 'mobi', 'azw', 'azw3'
         "library": library,
         "file_path": str(path),
         "file_size": size,
         "file_mtime": mtime,
         "file_hash": file_hash,
         "page_count": pages,
+        # Don't include cover_path here — it's written by a separate async step
+        # after this block, and overwriting it to None on every upsert wipes
+        # the existing cover before the next write can re-create it.
+        "converted_path": str(converted_path) if converted_path else None,
         "metadata_source": MetadataSource.local,
     }
 

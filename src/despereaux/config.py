@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     def metadata_cache_dir(self) -> Path:
         return self.data_dir / "metadata-cache"
 
+    @property
+    def converted_dir(self) -> Path:
+        """Where MOBI/AZW (etc.) converted EPUBs live, keyed by content hash."""
+        return self.data_dir / "converted"
+
 
 _settings: Settings | None = None
 
@@ -78,6 +83,7 @@ def get_settings() -> Settings:
             _settings.covers_dir,
             _settings.cache_dir,
             _settings.metadata_cache_dir,
+            _settings.converted_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
     return _settings

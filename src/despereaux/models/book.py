@@ -81,6 +81,10 @@ class Book(Base):
 
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cover_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    # For formats that need conversion to be readable in the browser
+    # (e.g. MOBI/AZW -> EPUB via Calibre). When set, /file serves this; /download
+    # still serves the original file_path so users can grab the source format.
+    converted_path: Mapped[str | None] = mapped_column(String, nullable=True)
 
     rating: Mapped[float | None] = mapped_column(Float, nullable=True)
     rating_count: Mapped[int | None] = mapped_column(Integer, nullable=True)

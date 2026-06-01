@@ -10,7 +10,8 @@
       window.DESPEREAUX_BOOK = {
         id: {{ book.id|tojson }},
         title: {{ book.title|tojson }},
-        format: {{ book.format|tojson }},
+        format: {{ effective_format|tojson }},
+        originalFormat: {{ book.format|tojson }},
         fileUrl: "/api/books/{{ book.id }}/file",
         manifestUrl: "/api/books/{{ book.id }}/manifest",
         progressUrl: "/api/books/{{ book.id }}/progress"

@@ -85,11 +85,14 @@ async def read_book(
     book = await books_repo.get_book(session, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
+    # Converted books (MOBI/AZW -> EPUB) are served as EPUB to the reader JS.
+    effective_format = "epub" if book.converted_path else book.format
     return templates.TemplateResponse(
         request,
         "reader.html",
         {
             "user": user,
             "book": book,
+            "effective_format": effective_format,
         },
     )
