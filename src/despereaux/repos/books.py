@@ -104,6 +104,32 @@ async def list_books(
     return list(result.scalars().all())
 
 
+async def find_duplicates(session: AsyncSession, book: Book) -> list[Book]:
+    """Find other books that look like duplicates of `book`. Match on (in order):
+    same file_hash, same openlibrary_id, or same google_books_id + isbn pair."""
+    conditions = []
+    if book.file_hash:
+        conditions.append(Book.file_hash == book.file_hash)
+    if book.openlibrary_id:
+        conditions.append(Book.openlibrary_id == book.openlibrary_id)
+    if book.google_books_id:
+        conditions.append(Book.google_books_id == book.google_books_id)
+    if book.isbn:
+        conditions.append(Book.isbn == book.isbn)
+    if not conditions:
+        return []
+    from sqlalchemy import or_
+
+    stmt = (
+        select(Book)
+        .where(or_(*conditions))
+        .where(Book.id != book.id)
+        .options(selectinload(Book.authors).selectinload(BookAuthor.author))
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def count_books_by_library(session: AsyncSession) -> dict[str, int]:
     """Returns {library_name: count} for every library that has books."""
     from sqlalchemy import func

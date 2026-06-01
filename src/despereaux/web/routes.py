@@ -12,6 +12,7 @@ from despereaux.db import get_db, session_scope
 from despereaux.middleware.auth import current_user
 from despereaux.repos import books as books_repo
 from despereaux.repos import progress as progress_repo
+from despereaux.repos.book_delete import delete_by_id
 from despereaux.services.metadata_apply import apply_candidate
 from despereaux.services.metadata_lookup import (
     fetch_candidate_by_id,
@@ -82,6 +83,7 @@ async def book_detail(
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
     prog = await progress_repo.get_progress(session, user_id=user["id"], book_id=book_id)
+    duplicates = await books_repo.find_duplicates(session, book)
     return templates.TemplateResponse(
         request,
         "book.html",
@@ -91,6 +93,7 @@ async def book_detail(
             "authors": [ba.author.name for ba in (book.authors or [])],
             "tags": [bt.tag.name for bt in (book.tags or [])],
             "progress": prog,
+            "duplicates": duplicates,
         },
     )
 
@@ -131,6 +134,17 @@ async def edit_metadata(
             "query_author": a or "",
         },
     )
+
+
+@router.post("/book/{book_id}/delete")
+async def delete_book(book_id: str, _user=Depends(current_user)):
+    """Remove a book from the library (DB row only — the file on disk stays).
+    Useful for pruning duplicates. The next /api/admin/scan would re-ingest
+    the file if it's still in a configured library path; to permanently
+    remove it, also delete or move the file."""
+    async with session_scope() as session:
+        await delete_by_id(session, book_id)
+    return RedirectResponse(url="/", status_code=303)
 
 
 @router.post("/book/{book_id}/metadata/refresh")

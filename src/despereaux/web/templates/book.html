@@ -12,6 +12,10 @@
       <a class="btn btn-primary" href="/read/{{ book.id }}">Read</a>
       <a class="btn" href="/api/books/{{ book.id }}/download">Download original</a>
       <a class="btn" href="/book/{{ book.id }}/metadata">Edit metadata</a>
+      <form method="post" action="/book/{{ book.id }}/delete" class="inline-form"
+            onsubmit="return confirm('Remove this entry from the library? The file at {{ book.file_path }} stays on disk; remove or move the file too if you don\'t want it re-ingested on next scan.');">
+        <button type="submit" class="btn btn-danger">Remove from library</button>
+      </form>
     </div>
   </div>
   <div class="info-col">
@@ -35,7 +39,28 @@
       {% if tags %}<dt>Tags</dt><dd>{{ tags|join(', ') }}</dd>{% endif %}
       <dt>Format</dt><dd>{{ book.format|upper }}</dd>
       <dt>File size</dt><dd>{{ (book.file_size / 1024 / 1024)|round(2) }} MB</dd>
+      <dt>File path</dt><dd><code>{{ book.file_path }}</code></dd>
     </dl>
+
+    {% if duplicates %}
+      <div class="duplicates">
+        <h3>Possible duplicates</h3>
+        <p>Other books that share file content, ISBN, or external ID with this one:</p>
+        <ul>
+          {% for d in duplicates %}
+            <li>
+              <a href="/book/{{ d.id }}">{{ d.title }}</a>
+              <code>{{ d.file_path }}</code>
+              {% if d.file_hash == book.file_hash %}<span class="dup-tag">same file</span>{% endif %}
+              {% if d.openlibrary_id and d.openlibrary_id == book.openlibrary_id %}<span class="dup-tag">same OL</span>{% endif %}
+              {% if d.google_books_id and d.google_books_id == book.google_books_id %}<span class="dup-tag">same GB</span>{% endif %}
+              {% if d.isbn and d.isbn == book.isbn %}<span class="dup-tag">same ISBN</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="hint">Visit any duplicate to remove it from the library.</p>
+      </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
