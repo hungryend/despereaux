@@ -37,6 +37,8 @@
         <form method="post" action="/book/{{ book.id }}/metadata/select" class="candidate-card">
           <input type="hidden" name="source" value="{{ c.source }}" />
           <input type="hidden" name="external_id" value="{{ c.external_id }}" />
+          {% if query_title %}<input type="hidden" name="q" value="{{ query_title }}" />{% endif %}
+          {% if query_author %}<input type="hidden" name="a" value="{{ query_author }}" />{% endif %}
           <div class="cover">
             {% if c.cover_url %}
               <img src="{{ c.cover_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" />

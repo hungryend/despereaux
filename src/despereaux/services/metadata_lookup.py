@@ -146,6 +146,26 @@ async def search_google_books(
     return out
 
 
+async def fetch_google_books_volume(volume_id: str) -> MetadataCandidate | None:
+    """Direct-by-ID lookup. Used as a fallback when a candidate the user
+    selected isn't in the per-book cache (e.g. came from a one-off manual search)."""
+    s = get_settings()
+    params: dict[str, str] = {}
+    if s.google_books_api_key:
+        params["key"] = s.google_books_api_key
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            r = await client.get(
+                f"https://www.googleapis.com/books/v1/volumes/{volume_id}", params=params
+            )
+            r.raise_for_status()
+            item = r.json()
+    except (httpx.HTTPError, httpx.TimeoutException) as e:
+        log.warning("Google Books volume fetch failed (%s): %s", volume_id, e)
+        return None
+    return _gb_to_candidate(item)
+
+
 # ---------- Open Library ----------
 
 
@@ -185,6 +205,70 @@ def _ol_to_candidate(doc: dict) -> MetadataCandidate | None:
         tags=list(doc.get("subject") or [])[:8],
         page_count=doc.get("number_of_pages_median"),
     )
+
+
+async def fetch_open_library_work(olid: str) -> MetadataCandidate | None:
+    """Look up a single Open Library work by OLID. Authors are referenced
+    by key (`/authors/OL...A`) — we resolve one author hop for the display
+    name; deeper resolution would be a lot of extra HTTP for little value."""
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            r = await client.get(f"https://openlibrary.org/works/{olid}.json")
+            r.raise_for_status()
+            work = r.json()
+    except (httpx.HTTPError, httpx.TimeoutException) as e:
+        log.warning("Open Library work fetch failed (%s): %s", olid, e)
+        return None
+
+    title = (work.get("title") or "").strip()
+    if not title:
+        return None
+    # description can be a string OR {"type":"/type/text","value":"..."}
+    desc_raw = work.get("description")
+    desc = desc_raw.get("value") if isinstance(desc_raw, dict) else desc_raw
+    cover_id = (work.get("covers") or [None])[0]
+    cover = _ol_cover_url(cover_id, None)
+    subjects = list(work.get("subjects") or [])[:8]
+    first_publish = work.get("first_publish_date")
+
+    # Resolve up to 2 author names — sequential, but capped.
+    authors: list[str] = []
+    for a in (work.get("authors") or [])[:2]:
+        akey = (a.get("author") or {}).get("key") if isinstance(a, dict) else None
+        if not akey:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                ar = await client.get(f"https://openlibrary.org{akey}.json")
+                ar.raise_for_status()
+                name = (ar.json() or {}).get("name")
+                if name:
+                    authors.append(name)
+        except (httpx.HTTPError, httpx.TimeoutException):
+            continue
+
+    return MetadataCandidate(
+        source="openlibrary",
+        external_id=olid,
+        title=title,
+        authors=authors,
+        publisher=None,
+        published_date=first_publish,
+        description=desc,
+        isbn=None,
+        cover_url=cover,
+        tags=subjects,
+    )
+
+
+async def fetch_candidate_by_id(source: str, external_id: str) -> MetadataCandidate | None:
+    """Resolve a candidate from its source + ID. Used as the canonical
+    lookup when a user selects something we don't have cached."""
+    if source == "googlebooks":
+        return await fetch_google_books_volume(external_id)
+    if source == "openlibrary":
+        return await fetch_open_library_work(external_id)
+    return None
 
 
 async def search_open_library(
