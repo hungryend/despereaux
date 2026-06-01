@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Edit metadata — {{ book.title }}{% endblock %}
+{% block content %}
+<div class="metadata-picker">
+  <header class="picker-header">
+    <a class="back" href="/book/{{ book.id }}">← Back to book</a>
+    <h1>Choose the right match</h1>
+    <p class="hint">
+      Current: <strong>{{ book.title }}</strong>{% if current_author %} by {{ current_author }}{% endif %}.
+      Pick the matching record below to overwrite metadata + cover. Sources: Google Books, Open Library.
+    </p>
+    <form method="post" action="/book/{{ book.id }}/metadata/refresh" class="refresh-form">
+      <button type="submit" class="btn">Refresh from sources</button>
+    </form>
+  </header>
+
+  {% if not candidates %}
+    <div class="empty">
+      <p>No candidates found. Try refreshing — the search uses the current title + author.</p>
+    </div>
+  {% else %}
+    <div class="candidate-grid">
+      {% for c in candidates %}
+        <form method="post" action="/book/{{ book.id }}/metadata/select" class="candidate-card">
+          <input type="hidden" name="source" value="{{ c.source }}" />
+          <input type="hidden" name="external_id" value="{{ c.external_id }}" />
+          <div class="cover">
+            {% if c.cover_url %}
+              <img src="{{ c.cover_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" />
+            {% else %}
+              <div class="no-cover">{{ c.title[:1]|upper }}</div>
+            {% endif %}
+            <div class="score" title="Match confidence">{{ (c.score * 100)|round|int }}%</div>
+          </div>
+          <div class="meta">
+            <div class="title">{{ c.title }}</div>
+            {% if c.authors %}<div class="authors">{{ c.authors|join(', ') }}</div>{% endif %}
+            <div class="line">
+              {% if c.published_date %}<span>{{ c.published_date[:4] }}</span>{% endif %}
+              {% if c.publisher %}<span>{{ c.publisher }}</span>{% endif %}
+              {% if c.page_count %}<span>{{ c.page_count }}p</span>{% endif %}
+            </div>
+            {% if c.description %}<div class="desc">{{ c.description[:240] }}{% if c.description|length > 240 %}…{% endif %}</div>{% endif %}
+            <div class="source">via {{ c.source }} {% if c.isbn %}· ISBN {{ c.isbn }}{% endif %}</div>
+          </div>
+          <button type="submit" class="apply">Use this</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -74,8 +74,17 @@ export class EpubReader implements Reader {
     })
 
     this.attachNavigation()
-    window.addEventListener('beforeunload', () => {
-      void this.tracker.flushNow()
+    this.attachLifecycleSavers()
+  }
+
+  private attachLifecycleSavers(): void {
+    // beforeunload alone isn't reliable (esp. on mobile). visibilitychange +
+    // pagehide cover background-tab / app-switch / close cases too.
+    const beaconNow = () => this.tracker.beacon()
+    window.addEventListener('beforeunload', beaconNow)
+    window.addEventListener('pagehide', beaconNow)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') beaconNow()
     })
   }
 

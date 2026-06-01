@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from despereaux.api import admin as admin_api
 from despereaux.api import books as books_api
 from despereaux.api import libraries as libraries_api
+from despereaux.api import metadata as metadata_api
 from despereaux.api import progress as progress_api
 from despereaux.api import stream as stream_api
 from despereaux.config import get_settings
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
 
     app.include_router(books_api.router)
     app.include_router(libraries_api.router)
+    app.include_router(metadata_api.router)
     app.include_router(progress_api.router)
     app.include_router(stream_api.router)
     app.include_router(admin_api.router)

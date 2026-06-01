@@ -147,3 +147,62 @@ main { padding: 1.5rem 1.25rem; max-width: 1400px; margin: 0 auto; }
 }
 .meta-grid dt { color: var(--fg-dim); }
 .meta-grid dd { margin: 0; }
+
+/* Metadata picker */
+.metadata-picker .picker-header {
+  margin-bottom: 1.5rem;
+}
+.metadata-picker .back { display: inline-block; margin-bottom: 0.5rem; color: var(--fg-dim); }
+.metadata-picker h1 { margin: 0.25rem 0 0.5rem; }
+.metadata-picker .hint { color: var(--fg-dim); margin: 0 0 0.75rem; }
+.metadata-picker .refresh-form { display: inline-block; }
+.metadata-picker .empty {
+  padding: 3rem 1rem; text-align: center; color: var(--fg-dim);
+  background: var(--bg-elev); border-radius: var(--radius);
+}
+
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.candidate-card {
+  display: flex; flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+.candidate-card .cover {
+  position: relative; aspect-ratio: 2 / 3;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.candidate-card .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.candidate-card .no-cover {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3rem; color: var(--fg-dim);
+}
+.candidate-card .score {
+  position: absolute; top: 6px; right: 6px;
+  padding: 2px 8px; background: rgba(0,0,0,0.7);
+  color: var(--accent); border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.candidate-card .meta { padding: 0.75rem; flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
+.candidate-card .title { font-size: 0.95rem; font-weight: 600; }
+.candidate-card .authors { color: var(--fg-dim); font-size: 0.85rem; }
+.candidate-card .line { display: flex; gap: 0.5rem; flex-wrap: wrap; color: var(--fg-dim); font-size: 0.8rem; }
+.candidate-card .line span { padding: 2px 6px; background: var(--bg); border-radius: 4px; }
+.candidate-card .desc { font-size: 0.82rem; color: var(--fg); line-height: 1.4; opacity: 0.85; }
+.candidate-card .source { font-size: 0.72rem; color: var(--fg-dim); margin-top: auto; }
+.candidate-card .apply {
+  margin: 0; padding: 0.65rem;
+  background: var(--accent); color: var(--accent-fg);
+  border: none; border-top: 1px solid var(--border);
+  cursor: pointer; font-weight: 600;
+}
+.candidate-card .apply:hover { filter: brightness(1.1); }

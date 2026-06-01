@@ -78,14 +78,27 @@ export class PdfReader implements Reader {
       /* no outline */
     }
 
+    // Mark the loaded page as "already saved" so the render-completion
+    // savePositionIfChanged() doesn't fire a redundant write of the same value.
+    this.lastSavedPage = startPage
     await this.goToPage(startPage)
     this.attachNavigation()
+    this.attachLifecycleSavers()
 
-    window.addEventListener('beforeunload', () => {
-      void this.tracker.flushNow()
-    })
     window.addEventListener('resize', () => {
       void this.goToPage(this.currentPage, /*redraw*/ true)
+    })
+  }
+
+  private attachLifecycleSavers(): void {
+    // beforeunload alone misses mobile tab-switch / app-background. Hook the
+    // visibility + pagehide events too; tracker.beacon() uses sendBeacon-style
+    // keepalive so the save survives page teardown.
+    const beaconNow = () => this.tracker.beacon()
+    window.addEventListener('beforeunload', beaconNow)
+    window.addEventListener('pagehide', beaconNow)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') beaconNow()
     })
   }
 

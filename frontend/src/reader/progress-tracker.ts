@@ -57,4 +57,33 @@ export class ProgressTracker {
     }
     await this.flush()
   }
+
+  /**
+   * Fire-and-forget save designed for page-hide / tab-close paths. Uses
+   * sendBeacon when available (browser guarantees delivery even if the page
+   * is being torn down), falls back to keepalive fetch. Doesn't await.
+   */
+  beacon(): void {
+    if (!this.pending) return
+    const body = JSON.stringify(this.pending)
+    this.pending = null
+    if (this.timer !== null) {
+      window.clearTimeout(this.timer)
+      this.timer = null
+    }
+    // sendBeacon only does POST, and our /progress endpoint is PUT. Using
+    // fetch with `keepalive: true` is the spec-blessed equivalent that
+    // preserves the HTTP verb and reaches the server even after page unload.
+    try {
+      void fetch(this.progressUrl, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body,
+        keepalive: true,
+      })
+    } catch {
+      /* page is gone — nothing else we can do */
+    }
+  }
 }

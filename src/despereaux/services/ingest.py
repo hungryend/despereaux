@@ -255,6 +255,22 @@ async def _finalise_ingest(
                 if refetched is not None:
                     refetched.cover_path = str(cover_path)
 
+    # External enrichment: best-effort, in-band but bounded. If the local
+    # metadata was decent (description present from EPUB OPF, say) this is a
+    # cheap cache hit; if not, it actually fetches Google Books / Open Library.
+    # Failures are logged and ignored — they don't block ingest.
+    if was_created:
+        try:
+            async with session_scope() as session:
+                from despereaux.repos.books import get_book
+                from despereaux.services.metadata_apply import maybe_auto_enrich
+
+                refetched = await get_book(session, book_id)
+                if refetched is not None:
+                    await maybe_auto_enrich(session, refetched)
+        except Exception as e:
+            log.info("auto-enrich skipped for %s (%s)", path.name, e)
+
     return (book_id, "created" if was_created else "updated")
 
 

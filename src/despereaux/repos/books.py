@@ -34,6 +34,10 @@ async def _get_or_create_author(session: AsyncSession, name: str) -> Author:
     return author
 
 
+# Re-export the helpers used by metadata_apply (kept internal-ish via underscore).
+__all__ = ["_get_or_create_author", "_get_or_create_tag", "_sort_name"]
+
+
 async def _get_or_create_series(session: AsyncSession, name: str) -> Series:
     sort_name = _sort_name(name)
     result = await session.execute(select(Series).where(Series.sort_name == sort_name))
