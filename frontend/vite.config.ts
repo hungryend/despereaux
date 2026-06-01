@@ -5,6 +5,10 @@ const defaultOutDir = resolve(__dirname, '../src/despereaux/static/reader')
 const outDir = process.env.VITE_OUT_DIR ?? defaultOutDir
 
 export default defineConfig({
+  // Important: the bundle is served from /static/reader/ in the FastAPI app
+  // (StaticFiles mount). `?url` imports + chunk URLs both resolve against
+  // this base — without it, PDF.js's worker ends up at /assets/... and 404s.
+  base: '/static/reader/',
   build: {
     outDir,
     emptyOutDir: true,
