@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "epubjs": "^0.3.93",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "^6.0.227"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
