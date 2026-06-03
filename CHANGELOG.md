@@ -7,6 +7,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- Release workflow: GitHub Release creation on tag push needs `contents: write` permission on GITHUB_TOKEN; the v0.1.0 tag publication failed on this. The image itself was published to GHCR successfully.
+
 ## [0.1.0] — 2026-06-03
 
 ### Added

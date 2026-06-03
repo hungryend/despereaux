@@ -112,6 +112,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     needs: build-push
+    # softprops/action-gh-release calls the Releases API which requires
+    # `contents: write` on GITHUB_TOKEN — the workflow-level default is
+    # `contents: read` so we elevate just this job.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
