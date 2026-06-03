@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Library — despereaux{% endblock %}
+{% block content %}
+<div class="library">
+  {% if not books %}
+    <div class="empty">
+      <h2>No books yet</h2>
+      <p>Drop EPUB files into your library folder and trigger a scan from the admin endpoint:</p>
+      <pre><code>POST /api/admin/scan</code></pre>
+    </div>
+  {% else %}
+    <div class="book-grid">
+      {% for book in books %}
+        {% set authors = book.authors|map(attribute='author')|map(attribute='name')|list %}
+        <a class="book-card" href="/book/{{ book.id }}">
+          <div class="cover">
+            {% if book.cover_path %}
+              <img src="/api/books/{{ book.id }}/cover" alt="" loading="lazy" />
+            {% else %}
+              <div class="no-cover"><span>{{ book.title[:1]|upper }}</span></div>
+            {% endif %}
+            {% set p = progress_map.get(book.id) %}
+            {% if p and p > 0 %}
+              <div class="progress-bar"><span style="width: {{ (p * 100)|round(1) }}%"></span></div>
+            {% endif %}
+          </div>
+          <div class="meta">
+            <div class="title">{{ book.title }}</div>
+            <div class="authors">{{ authors|join(', ') or '—' }}</div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

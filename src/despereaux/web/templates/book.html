@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} — despereaux{% endblock %}
+{% block content %}
+<div class="book-detail">
+  <div class="cover-col">
+    {% if book.cover_path %}
+      <img src="/api/books/{{ book.id }}/cover" alt="" />
+    {% else %}
+      <div class="no-cover-large"><span>{{ book.title[:1]|upper }}</span></div>
+    {% endif %}
+    <div class="actions">
+      <a class="btn btn-primary" href="/read/{{ book.id }}">Read</a>
+      <a class="btn" href="/api/books/{{ book.id }}/download">Download original</a>
+      <a class="btn" href="/book/{{ book.id }}/metadata">Edit metadata</a>
+      {% if not parent %}
+        <a class="btn" href="/book/{{ book.id }}/attach">Attach as asset of…</a>
+      {% endif %}
+      <form method="post" action="/book/{{ book.id }}/delete" class="inline-form"
+            onsubmit="return confirm('Remove this entry from the library? The file at {{ book.file_path }} stays on disk; remove or move the file too if you don\'t want it re-ingested on next scan.');">
+        <button type="submit" class="btn btn-danger">Remove from library</button>
+      </form>
+    </div>
+  </div>
+  <div class="info-col">
+    {% if parent %}
+      <div class="parent-link">
+        Asset of <a href="/book/{{ parent.id }}">{{ parent.title }}</a>
+        {% if book.asset_label %}<span class="asset-label">{{ book.asset_label }}</span>{% endif %}
+        <form method="post" action="/book/{{ book.id }}/detach" class="inline-form">
+          <button type="submit" class="btn-link">Detach</button>
+        </form>
+      </div>
+    {% endif %}
+    <h1>{{ book.title }}</h1>
+    {% if authors %}<div class="authors">{{ authors|join(', ') }}</div>{% endif %}
+    {% if book.series %}<div class="series">Series: {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}</div>{% endif %}
+    {% if progress %}
+      <div class="progress-line">
+        Last read: {{ (progress.percent * 100)|round(0) }}% — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}
+      </div>
+    {% endif %}
+    {% if book.description %}
+      <div class="description">{{ book.description|safe }}</div>
+    {% endif %}
+    <dl class="meta-grid">
+      {% if book.publisher %}<dt>Publisher</dt><dd>{{ book.publisher }}</dd>{% endif %}
+      {% if book.published_date %}<dt>Published</dt><dd>{{ book.published_date }}</dd>{% endif %}
+      {% if book.language %}<dt>Language</dt><dd>{{ book.language }}</dd>{% endif %}
+      {% if book.isbn %}<dt>ISBN</dt><dd>{{ book.isbn }}</dd>{% endif %}
+      {% if book.page_count %}<dt>Pages</dt><dd>~{{ book.page_count }}</dd>{% endif %}
+      {% if tags %}<dt>Tags</dt><dd>{{ tags|join(', ') }}</dd>{% endif %}
+      <dt>Format</dt><dd>{{ book.format|upper }}</dd>
+      <dt>File size</dt><dd>{{ (book.file_size / 1024 / 1024)|round(2) }} MB</dd>
+      <dt>File path</dt><dd><code>{{ book.file_path }}</code></dd>
+    </dl>
+
+    {% if children %}
+      <div class="children">
+        <h3>Attached assets</h3>
+        <ul class="asset-list">
+          {% for c in children %}
+            <li>
+              <div class="asset-main">
+                <a href="/book/{{ c.id }}" class="asset-title">
+                  {% if c.asset_label %}<strong>{{ c.asset_label }}</strong> · {% endif %}{{ c.title }}
+                </a>
+                <div class="asset-meta">
+                  {{ c.format|upper }}
+                  {% if c.page_count %}· {{ c.page_count }} pages{% endif %}
+                  · {{ (c.file_size / 1024 / 1024)|round(1) }} MB
+                </div>
+              </div>
+              <div class="asset-actions">
+                <a class="btn btn-small btn-primary" href="/read/{{ c.id }}">Read</a>
+                <a class="btn btn-small" href="/api/books/{{ c.id }}/download">Download</a>
+                <form method="post" action="/book/{{ c.id }}/detach" class="inline-form">
+                  <button type="submit" class="btn btn-small btn-ghost">Detach</button>
+                </form>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if duplicates %}
+      <div class="duplicates">
+        <h3>Possible duplicates</h3>
+        <p>Other books that share file content, ISBN, or external ID with this one:</p>
+        <ul>
+          {% for d in duplicates %}
+            <li>
+              <a href="/book/{{ d.id }}">{{ d.title }}</a>
+              <code>{{ d.file_path }}</code>
+              {% if d.file_hash == book.file_hash %}<span class="dup-tag">same file</span>{% endif %}
+              {% if d.openlibrary_id and d.openlibrary_id == book.openlibrary_id %}<span class="dup-tag">same OL</span>{% endif %}
+              {% if d.google_books_id and d.google_books_id == book.google_books_id %}<span class="dup-tag">same GB</span>{% endif %}
+              {% if d.isbn and d.isbn == book.isbn %}<span class="dup-tag">same ISBN</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="hint">Visit any duplicate to remove it from the library.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
