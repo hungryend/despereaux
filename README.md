@@ -79,10 +79,10 @@ Mounts (full docs inline in `docker-compose.yml`):
 
 ## Deploy (media-server stack)
 
-Despereaux wires into the existing [Sipador/media-server](https://github.com/Sipador/media-server) stack. Three things have been changed in the media-server checkout:
+Despereaux wires into a [linuxserver](https://linuxserver.io)-style media-server compose stack (Plex / Immich / SWAG / Authentik / etc.). Three things have been changed in the media-server checkout:
 
 1. **`media-server/docker-compose.yml`** — `despereaux` service block appended after `audiobookshelf`. This file IS git-tracked; commit + push when ready.
-2. **`media-server/swag-proxy-confs/despereaux.subdomain.conf`** — routes `despereaux.sipador.duckdns.org`, Authentik-gated. **Not git-tracked** in media-server (the whole `swag-proxy-confs/` folder is untracked) — sync to the deploy box separately.
+2. **`media-server/swag-proxy-confs/despereaux.subdomain.conf`** — routes `despereaux.example.com`, Authentik-gated. **Not git-tracked** in media-server (the whole `swag-proxy-confs/` folder is untracked) — sync to the deploy box separately.
 3. **`media-server/homepage-config/services.yaml`** — Homepage tile entry. Also **not git-tracked**; sync separately.
 
 ### On the deploy box
@@ -112,14 +112,14 @@ docker compose restart swag homepage
 
 ### Authentik
 
-Create application `Despereaux`, launch URL `https://despereaux.sipador.duckdns.org`, bind to the existing SWAG forward-auth outpost. Create group `ebook-admin` and add yourself.
+Create application `Despereaux`, launch URL `https://despereaux.example.com`, bind to the existing SWAG forward-auth outpost. Create group `ebook-admin` and add yourself.
 
 ### First scan
 
-Once `despereaux.sipador.duckdns.org` resolves and you can log in, trigger the initial library scan:
+Once `despereaux.example.com` resolves and you can log in, trigger the initial library scan:
 
 ```bash
-curl -X POST https://despereaux.sipador.duckdns.org/api/admin/scan \
+curl -X POST https://despereaux.example.com/api/admin/scan \
   -H "Cookie: <your-authentik-session-cookie>"
 ```
 

@@ -26,7 +26,7 @@ services:
       # is fine; the file mode is mediated through the VM.
       - PUID=1000
       - PGID=1000
-      - TZ=Australia/Brisbane
+      - TZ=UTC
 
       # === Library + state paths (inside the container) ===
       # Match the right-hand side of the volumes below — usually leave these.
