@@ -190,4 +190,4 @@ despereaux/
 └── frontend/                        # Vite + TypeScript reader (epub.js)
 ```
 
-See the full plan at `~/.claude/plans/i-want-to-create-hazy-spring.md`.
+

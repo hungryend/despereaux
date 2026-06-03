@@ -47,3 +47,8 @@ htmlcov/
 
 # Logs
 *.log
+
+# Internal handoff / AI-context notes — kept locally, not published.
+HANDOFF.md
+NOTES.md
+.claude/
