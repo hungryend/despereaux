@@ -230,7 +230,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uuid-utils", specifier = ">=0.10" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.48.0" },
     { name = "watchfiles", specifier = ">=1.0" },
 ]
 provides-extras = ["formats"]
