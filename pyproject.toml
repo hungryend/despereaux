@@ -19,7 +19,7 @@ dependencies = [
     "watchfiles>=1.0",
     "structlog>=24.4",
     "uuid-utils>=0.10",
-    "python-multipart>=0.0.20",
+    "python-multipart>=0.0.30",
     "rapidfuzz>=3.10",
 ]
 
@@ -32,7 +32,7 @@ formats = [
 
 [dependency-groups]
 dev = [
-    "ruff>=0.8",
+    "ruff>=0.15.15",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
