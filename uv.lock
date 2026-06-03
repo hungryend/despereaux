@@ -227,7 +227,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "rapidfuzz", specifier = ">=3.10" },
     { name = "rarfile", marker = "extra == 'formats'", specifier = ">=4.2" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.50" },
     { name = "structlog", specifier = ">=24.4" },
     { name = "uuid-utils", specifier = ">=0.10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
