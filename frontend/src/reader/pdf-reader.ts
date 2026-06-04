@@ -12,6 +12,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 // upserting on every scroll/render tick).
 const SAVE_PAGE_DELTA = 1
 
+// Zoom limits. 1 = fit-to-window (the default). Above 1, the page is rendered
+// larger than the viewport and can be panned. Re-rendering at the target scale
+// (rather than CSS-scaling a bitmap) keeps text crisp at every zoom level.
+const MIN_ZOOM = 1
+const MAX_ZOOM = 4
+const ZOOM_STEP = 1.25
+const ZOOM_KEY = 'despereaux:pdfZoom'
+
 interface PdfPosition {
   page: number
 }
@@ -27,10 +35,16 @@ export class PdfReader implements Reader {
   private numPages = 0
   private lastSavedPage = -1
 
+  private zoom = 1
+  private fitScale = 1
+  private zoomControls: HTMLElement | null = null
+  private zoomLabel: HTMLElement | null = null
+
   constructor(private bootstrap: BookBootstrap) {
     this.tracker = new ProgressTracker(bootstrap.progressUrl)
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'pdf-canvas'
+    this.zoom = this.loadZoom()
   }
 
   async start(): Promise<void> {
@@ -81,7 +95,8 @@ export class PdfReader implements Reader {
     // Mark the loaded page as "already saved" so the render-completion
     // savePositionIfChanged() doesn't fire a redundant write of the same value.
     this.lastSavedPage = startPage
-    await this.goToPage(startPage)
+    await this.goToPage(startPage, false, true)
+    this.createZoomControls()
     this.attachNavigation()
     this.attachLifecycleSavers()
 
@@ -127,13 +142,13 @@ export class PdfReader implements Reader {
       if (!Array.isArray(dest) || dest.length === 0) return
       const ref = dest[0]
       const pageIndex = await this.pdf.getPageIndex(ref)
-      await this.goToPage(pageIndex + 1)
+      await this.goToPage(pageIndex + 1, false, true)
     } catch (e) {
       console.warn('PDF TOC navigation failed', e)
     }
   }
 
-  private async goToPage(pageNum: number, force = false): Promise<void> {
+  private async goToPage(pageNum: number, force = false, recenter = false): Promise<void> {
     if (!this.pdf || !this.container) return
     if (pageNum < 1 || pageNum > this.numPages) return
     if (!force && pageNum === this.currentPage && this.renderTask === null) {
@@ -149,20 +164,23 @@ export class PdfReader implements Reader {
 
     const page = await this.pdf.getPage(pageNum)
 
-    // Fit-to-width based on the container's current size.
+    // Fit-to-window scale, then multiply by the user's zoom. The backing store
+    // is sized at fit * zoom * devicePixelRatio so text stays sharp; the CSS
+    // size is fit * zoom CSS px (so zoom > 1 overflows the viewport and pans).
     const containerWidth = this.container.clientWidth
     const containerHeight = this.container.clientHeight
     const baseViewport = page.getViewport({ scale: 1 })
     const scaleX = containerWidth / baseViewport.width
     const scaleY = containerHeight / baseViewport.height
-    const scale = Math.min(scaleX, scaleY) * (window.devicePixelRatio || 1)
-    const viewport = page.getViewport({ scale })
+    this.fitScale = Math.min(scaleX, scaleY)
+    const cssScale = this.fitScale * this.zoom
+    const dpr = window.devicePixelRatio || 1
+    const viewport = page.getViewport({ scale: cssScale * dpr })
 
     this.canvas.width = viewport.width
     this.canvas.height = viewport.height
-    // CSS size so DPR scaling looks right.
-    this.canvas.style.width = `${viewport.width / (window.devicePixelRatio || 1)}px`
-    this.canvas.style.height = `${viewport.height / (window.devicePixelRatio || 1)}px`
+    this.canvas.style.width = `${viewport.width / dpr}px`
+    this.canvas.style.height = `${viewport.height / dpr}px`
 
     const ctx = this.canvas.getContext('2d')
     if (!ctx) return
@@ -176,6 +194,13 @@ export class PdfReader implements Reader {
       this.renderTask = null
     }
 
+    if (recenter) {
+      // Center horizontally, top-align vertically (typical for a fresh page).
+      const cssW = this.canvas.clientWidth
+      this.container.scrollLeft = Math.max(0, (cssW - this.container.clientWidth) / 2)
+      this.container.scrollTop = 0
+    }
+
     this.savePositionIfChanged()
   }
 
@@ -184,6 +209,120 @@ export class PdfReader implements Reader {
     this.lastSavedPage = this.currentPage
     const percent = this.numPages > 0 ? this.currentPage / this.numPages : 0
     this.tracker.schedule(JSON.stringify({ page: this.currentPage }), percent)
+  }
+
+  // === Zoom ===
+
+  private loadZoom(): number {
+    try {
+      const raw = window.localStorage.getItem(ZOOM_KEY)
+      if (raw) return this.clampZoom(parseFloat(raw))
+    } catch {
+      /* storage unavailable */
+    }
+    return 1
+  }
+
+  private clampZoom(z: number): number {
+    if (!Number.isFinite(z)) return 1
+    return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
+  }
+
+  /**
+   * Re-render the current page at `target` zoom, keeping the point at
+   * (screenX, screenY) anchored under the same spot on screen.
+   */
+  private async applyZoom(target: number, screenX: number, screenY: number): Promise<void> {
+    if (!this.container) return
+    const newZoom = this.clampZoom(target)
+    if (Math.abs(newZoom - this.zoom) < 0.001) return
+
+    const root = this.container
+    const ratio = newZoom / this.zoom
+    const rect = root.getBoundingClientRect()
+    const fx = screenX - rect.left
+    const fy = screenY - rect.top
+    const newScrollLeft = (root.scrollLeft + fx) * ratio - fx
+    const newScrollTop = (root.scrollTop + fy) * ratio - fy
+
+    this.zoom = newZoom
+    this.persistZoom()
+    this.updateZoomUi()
+    await this.goToPage(this.currentPage, true)
+
+    root.scrollLeft = Math.max(0, newScrollLeft)
+    root.scrollTop = Math.max(0, newScrollTop)
+  }
+
+  private persistZoom(): void {
+    try {
+      window.localStorage.setItem(ZOOM_KEY, String(this.zoom))
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  private viewportCenter(): { x: number; y: number } {
+    const rect = this.container?.getBoundingClientRect()
+    if (!rect) return { x: 0, y: 0 }
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+  }
+
+  zoomIn(): void {
+    const c = this.viewportCenter()
+    void this.applyZoom(this.zoom * ZOOM_STEP, c.x, c.y)
+  }
+
+  zoomOut(): void {
+    const c = this.viewportCenter()
+    void this.applyZoom(this.zoom / ZOOM_STEP, c.x, c.y)
+  }
+
+  resetZoom(): void {
+    const c = this.viewportCenter()
+    void this.applyZoom(1, c.x, c.y)
+  }
+
+  private createZoomControls(): void {
+    const bar = document.createElement('div')
+    bar.className = 'pdf-zoom'
+
+    const out = document.createElement('button')
+    out.type = 'button'
+    out.textContent = '−'
+    out.setAttribute('aria-label', 'Zoom out')
+    out.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.zoomOut()
+    })
+
+    const level = document.createElement('button')
+    level.type = 'button'
+    level.className = 'pdf-zoom-level'
+    level.setAttribute('aria-label', 'Reset zoom')
+    level.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.resetZoom()
+    })
+
+    const inc = document.createElement('button')
+    inc.type = 'button'
+    inc.textContent = '+'
+    inc.setAttribute('aria-label', 'Zoom in')
+    inc.addEventListener('click', (e) => {
+      e.stopPropagation()
+      this.zoomIn()
+    })
+
+    bar.append(out, level, inc)
+    document.body.appendChild(bar)
+    this.zoomControls = bar
+    this.zoomLabel = level
+    this.updateZoomUi()
+  }
+
+  private updateZoomUi(): void {
+    if (this.zoomLabel) this.zoomLabel.textContent = `${Math.round(this.zoom * 100)}%`
   }
 
   private attachNavigation(): void {
@@ -195,31 +334,116 @@ export class PdfReader implements Reader {
         this.prev()
         e.preventDefault()
       } else if (e.key === 'Home') {
-        void this.goToPage(1)
+        void this.goToPage(1, false, true)
       } else if (e.key === 'End') {
-        void this.goToPage(this.numPages)
+        void this.goToPage(this.numPages, false, true)
+      } else if (e.key === '+' || e.key === '=') {
+        this.zoomIn()
+        e.preventDefault()
+      } else if (e.key === '-' || e.key === '_') {
+        this.zoomOut()
+        e.preventDefault()
+      } else if (e.key === '0') {
+        this.resetZoom()
+        e.preventDefault()
       }
     }
     document.addEventListener('keyup', onKey)
 
-    // Touch swipes on the canvas.
+    // Touch gestures: single-finger swipe turns pages (only at fit zoom, so
+    // panning a zoomed page doesn't flip it); two-finger pinch zooms; a
+    // double-tap toggles between fit and 2x at the tapped point.
+    const TH = 50
+    const DOUBLE_TAP_MS = 300
     let sx: number | null = null
     let sy: number | null = null
-    const TH = 50
+    let pinchStartDist: number | null = null
+    let pinchStartZoom = 1
+    let pinchMidX = 0
+    let pinchMidY = 0
+    let liveZoom = this.zoom
+    let lastTapTime = 0
+    let lastTapX = 0
+    let lastTapY = 0
+    let consumedByDoubleTap = false
+
+    const distance = (a: Touch, b: Touch) =>
+      Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+
     this.canvas.addEventListener(
       'touchstart',
       (e) => {
+        if (e.touches.length === 2) {
+          // Begin pinch.
+          sx = null
+          pinchStartDist = distance(e.touches[0], e.touches[1])
+          pinchStartZoom = this.zoom
+          liveZoom = this.zoom
+          pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2
+          pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2
+          const r = this.canvas.getBoundingClientRect()
+          this.canvas.style.transformOrigin = `${pinchMidX - r.left}px ${pinchMidY - r.top}px`
+          e.preventDefault()
+          return
+        }
         if (e.touches.length !== 1) return
-        sx = e.touches[0].clientX
-        sy = e.touches[0].clientY
+        const t = e.touches[0]
+        const now = Date.now()
+        if (
+          now - lastTapTime < DOUBLE_TAP_MS &&
+          Math.abs(t.clientX - lastTapX) < 30 &&
+          Math.abs(t.clientY - lastTapY) < 30
+        ) {
+          // Double tap: toggle fit <-> 2x at the tap point.
+          consumedByDoubleTap = true
+          lastTapTime = 0
+          sx = null
+          e.preventDefault()
+          void this.applyZoom(this.zoom > 1.01 ? 1 : 2, t.clientX, t.clientY)
+          return
+        }
+        consumedByDoubleTap = false
+        lastTapTime = now
+        lastTapX = t.clientX
+        lastTapY = t.clientY
+        sx = t.clientX
+        sy = t.clientY
       },
-      { passive: true }
+      { passive: false }
     )
+
+    this.canvas.addEventListener(
+      'touchmove',
+      (e) => {
+        if (pinchStartDist != null && e.touches.length === 2) {
+          e.preventDefault()
+          const d = distance(e.touches[0], e.touches[1])
+          liveZoom = this.clampZoom(pinchStartZoom * (d / pinchStartDist))
+          // Smooth CSS-transform preview; committed to a crisp re-render on end.
+          this.canvas.style.transform = `scale(${liveZoom / this.zoom})`
+        }
+      },
+      { passive: false }
+    )
+
     this.canvas.addEventListener('touchend', (e) => {
+      if (pinchStartDist != null && e.touches.length < 2) {
+        pinchStartDist = null
+        this.canvas.style.transform = ''
+        this.canvas.style.transformOrigin = ''
+        void this.applyZoom(liveZoom, pinchMidX, pinchMidY)
+        return
+      }
+      if (consumedByDoubleTap) {
+        consumedByDoubleTap = false
+        return
+      }
       if (sx === null || sy === null) return
       const dx = (e.changedTouches[0]?.clientX ?? sx) - sx
       const dy = (e.changedTouches[0]?.clientY ?? sy) - sy
       sx = sy = null
+      // When zoomed in, a single-finger drag pans (native scroll) — don't page.
+      if (this.zoom > 1.01) return
       if (Math.abs(dx) < TH || Math.abs(dx) < Math.abs(dy)) return
       if (dx < 0) this.next()
       else this.prev()
@@ -227,11 +451,11 @@ export class PdfReader implements Reader {
   }
 
   next(): void {
-    void this.goToPage(this.currentPage + 1)
+    void this.goToPage(this.currentPage + 1, false, true)
   }
 
   prev(): void {
-    void this.goToPage(this.currentPage - 1)
+    void this.goToPage(this.currentPage - 1, false, true)
   }
 
   goTo(href: string): void {
@@ -247,6 +471,7 @@ export class PdfReader implements Reader {
     this.renderTask?.cancel()
     void this.pdf?.destroy()
     this.canvas.remove()
+    this.zoomControls?.remove()
     this.container?.classList.remove('pdf-mode')
   }
 }
