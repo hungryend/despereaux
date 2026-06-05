@@ -131,11 +131,11 @@ def create_app() -> FastAPI:
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> Response:
-        # Browsers that ignore <link rel="icon"> still hit /favicon.ico —
-        # redirect to the mascot PNG.
+        # Browsers that won't honour <link rel="icon" type="image/svg+xml"> still
+        # hit /favicon.ico — redirect to the SVG so they get something.
         from fastapi.responses import RedirectResponse
 
-        return RedirectResponse(url="/static/img/mascot.png", status_code=302)
+        return RedirectResponse(url="/static/img/favicon.svg", status_code=302)
 
     return app
 
