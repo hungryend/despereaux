@@ -1,7 +1,7 @@
 <h1 align="center">despereaux</h1>
 
 <p align="center">
-  <img src="src/despereaux/static/img/mascot.png" alt="despereaux mascot" width="200" />
+  <img src="src/despereaux/static/img/logo.svg" alt="despereaux logo" width="200" />
 </p>
 
 <p align="center">
