@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "epubjs": "^0.3.93",
+    "epubjs": "^0.4.2",
     "pdfjs-dist": "^4.10.38"
   },
   "devDependencies": {
