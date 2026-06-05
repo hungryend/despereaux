@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 80" role="img" aria-label="despereaux">
+  <title>despereaux</title>
+
+  <!-- Logomark on the left -->
+  <g transform="translate(0,8)">
+    <circle cx="32" cy="32" r="32" fill="#1a1c21"/>
+    <circle cx="32" cy="32" r="31" fill="none" stroke="#d4a64b" stroke-width="1" opacity="0.35"/>
+    <g fill="#d4a64b">
+      <!-- ears -->
+      <circle cx="22" cy="22" r="8"/>
+      <circle cx="42" cy="22" r="8"/>
+      <!-- head -->
+      <circle cx="32" cy="33" r="12"/>
+    </g>
+    <circle cx="22" cy="23" r="4" fill="#0e0f12"/>
+    <circle cx="42" cy="23" r="4" fill="#0e0f12"/>
+    <circle cx="27" cy="33" r="1.4" fill="#0e0f12"/>
+    <circle cx="37" cy="33" r="1.4" fill="#0e0f12"/>
+    <ellipse cx="32" cy="40" rx="1.6" ry="1.1" fill="#0e0f12"/>
+  </g>
+
+  <!-- Wordmark text -->
+  <text x="84" y="56"
+        font-family="ui-serif, Georgia, 'Iowan Old Style', 'Palatino Linotype', serif"
+        font-size="44"
+        font-weight="600"
+        letter-spacing="-0.5"
+        fill="#e9ecf1">despereaux</text>
+</svg>

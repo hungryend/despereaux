@@ -38,17 +38,13 @@ a:hover { color: var(--accent); }
 }
 .brand:hover { color: var(--fg); }
 .brand-logo {
-  width: 36px; height: 36px;
+  width: 32px; height: 32px;
   display: block;
-  object-fit: contain;
-  /* The mascot art is dark line-work — invert to read on the dark UI,
-     then tint gold via sepia + hue-rotate hack. */
-  filter: invert(1) sepia(1) saturate(4) hue-rotate(0deg) brightness(0.9);
+  /* slight gold glow on hover */
   transition: filter 0.2s ease, transform 0.2s ease;
 }
 .brand:hover .brand-logo {
-  filter: invert(1) sepia(1) saturate(6) hue-rotate(0deg) brightness(1.1)
-          drop-shadow(0 0 6px rgba(212, 166, 75, 0.5));
+  filter: drop-shadow(0 0 6px rgba(212, 166, 75, 0.45));
 }
 .brand-text { color: var(--fg); }
 .search { flex: 1; min-width: 200px; max-width: 480px; }
