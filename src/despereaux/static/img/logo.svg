@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="despereaux logo">
+  <title>despereaux</title>
+  <desc>Stylised mouse perched on an open book, in despereaux's gold-on-dark palette.</desc>
+
+  <!-- Background — soft radial in the app's dark tones -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="62%">
+      <stop offset="0%"  stop-color="#1a1c21"/>
+      <stop offset="100%" stop-color="#0e0f12"/>
+    </radialGradient>
+  </defs>
+  <circle cx="128" cy="128" r="124" fill="url(#bg)"/>
+  <!-- Hairline gold rim -->
+  <circle cx="128" cy="128" r="122" fill="none" stroke="#d4a64b" stroke-width="1.5" opacity="0.35"/>
+
+  <!-- Open book -->
+  <g fill="#d4a64b">
+    <!-- Pages -->
+    <path d="M 46 196 L 46 168 Q 56 162 128 162 Q 200 162 210 168 L 210 196 Z"/>
+    <!-- Centre crease -->
+    <path d="M 128 164 L 128 196" stroke="#0e0f12" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Faint page lines -->
+    <g stroke="#0e0f12" stroke-width="1.2" stroke-linecap="round" opacity="0.55" fill="none">
+      <path d="M 64 176 L 118 176"/>
+      <path d="M 66 184 L 113 184"/>
+      <path d="M 138 176 L 192 176"/>
+      <path d="M 143 184 L 190 184"/>
+    </g>
+  </g>
+
+  <!-- Mouse body -->
+  <g fill="#d4a64b">
+    <!-- Lower body -->
+    <ellipse cx="128" cy="138" rx="40" ry="34"/>
+    <!-- Head -->
+    <circle cx="128" cy="112" r="29"/>
+    <!-- Big ears (signature Despereaux feature) -->
+    <circle cx="100" cy="90"  r="20"/>
+    <circle cx="156" cy="90"  r="20"/>
+  </g>
+  <!-- Inner ears -->
+  <circle cx="100" cy="93" r="11" fill="#0e0f12"/>
+  <circle cx="156" cy="93" r="11" fill="#0e0f12"/>
+  <circle cx="100" cy="93" r="6"  fill="#d4a64b" opacity="0.6"/>
+  <circle cx="156" cy="93" r="6"  fill="#d4a64b" opacity="0.6"/>
+
+  <!-- Face -->
+  <circle cx="118" cy="113" r="2.6" fill="#0e0f12"/>
+  <circle cx="138" cy="113" r="2.6" fill="#0e0f12"/>
+  <!-- Tiny highlight on eyes -->
+  <circle cx="119" cy="112" r="0.9" fill="#d4a64b"/>
+  <circle cx="139" cy="112" r="0.9" fill="#d4a64b"/>
+  <!-- Nose -->
+  <ellipse cx="128" cy="127" rx="3.2" ry="2.2" fill="#0e0f12"/>
+  <!-- Whiskers, three short on each side -->
+  <g stroke="#0e0f12" stroke-width="1.2" stroke-linecap="round" opacity="0.7">
+    <path d="M 122 129 L 105 128"/>
+    <path d="M 122 132 L 104 134"/>
+    <path d="M 122 135 L 106 140"/>
+    <path d="M 134 129 L 151 128"/>
+    <path d="M 134 132 L 152 134"/>
+    <path d="M 134 135 L 150 140"/>
+  </g>
+
+  <!-- Tail curling up + around -->
+  <path d="M 166 158 Q 202 168 204 132 Q 206 100 178 96"
+        stroke="#d4a64b" stroke-width="5" fill="none"
+        stroke-linecap="round"/>
+
+  <!-- Tiny "needle/sword" — a Despereaux thing -->
+  <!-- (Omitted to keep the mark legible at favicon sizes) -->
+</svg>

@@ -15,6 +15,7 @@ from despereaux.api import books as books_api
 from despereaux.api import libraries as libraries_api
 from despereaux.api import metadata as metadata_api
 from despereaux.api import progress as progress_api
+from despereaux.api import progress_list as progress_list_api
 from despereaux.api import stream as stream_api
 from despereaux.config import get_settings
 from despereaux.db import apply_sqlite_pragmas
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(libraries_api.router)
     app.include_router(metadata_api.router)
     app.include_router(progress_api.router)
+    app.include_router(progress_list_api.router)
     app.include_router(stream_api.router)
     app.include_router(admin_api.router)
     app.include_router(web_routes.router)
@@ -129,11 +131,11 @@ def create_app() -> FastAPI:
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon() -> Response:
-        # Browsers that ignore <link rel="icon"> still hit /favicon.ico —
-        # redirect to the mascot PNG.
+        # Browsers that won't honour <link rel="icon" type="image/svg+xml"> still
+        # hit /favicon.ico — redirect to the SVG so they get something.
         from fastapi.responses import RedirectResponse
 
-        return RedirectResponse(url="/static/img/mascot.png", status_code=302)
+        return RedirectResponse(url="/static/img/favicon.svg", status_code=302)
 
     return app
 
