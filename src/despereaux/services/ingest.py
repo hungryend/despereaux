@@ -23,6 +23,7 @@ from despereaux.models import MetadataSource
 from despereaux.repos.books import get_book_by_path, upsert_book
 from despereaux.services.converter import convert_to_epub
 from despereaux.services.covers import write_cover
+from despereaux.services.metadata.comic import read_comic_metadata
 from despereaux.services.metadata.epub import estimate_page_count, read_epub_metadata
 from despereaux.services.metadata.pdf import read_pdf_metadata
 
@@ -31,7 +32,8 @@ log = logging.getLogger(__name__)
 NATIVE_EPUB_EXTS = {".epub"}
 CONVERTIBLE_TO_EPUB_EXTS = {".mobi", ".azw", ".azw3"}
 NATIVE_PDF_EXTS = {".pdf"}
-SUPPORTED_EXTS = NATIVE_EPUB_EXTS | CONVERTIBLE_TO_EPUB_EXTS | NATIVE_PDF_EXTS
+COMIC_EXTS = {".cbz", ".cbr"}
+SUPPORTED_EXTS = NATIVE_EPUB_EXTS | CONVERTIBLE_TO_EPUB_EXTS | NATIVE_PDF_EXTS | COMIC_EXTS
 
 
 def detect_format(path: Path) -> str | None:
@@ -46,6 +48,10 @@ def detect_format(path: Path) -> str | None:
         return "azw3"
     if ext in NATIVE_PDF_EXTS:
         return "pdf"
+    if ext == ".cbz":
+        return "cbz"
+    if ext == ".cbr":
+        return "cbr"
     return None
 
 
@@ -154,6 +160,30 @@ async def _extract_pdf(path: Path) -> _ExtractedMeta | None:
     )
 
 
+async def _extract_comic(path: Path) -> _ExtractedMeta | None:
+    try:
+        m = read_comic_metadata(path)
+    except Exception as e:
+        log.warning("comic metadata extraction failed for %s: %s", path, e)
+        return None
+    if m.page_count <= 0:
+        log.warning("skipping %s: no page images found in archive", path.name)
+        return None
+    return _ExtractedMeta(
+        title=m.title,
+        authors=m.authors,
+        publisher=m.publisher,
+        published_date=m.published_date,
+        language=m.language,
+        description=m.description,
+        isbn=m.isbn,
+        series=m.series,
+        tags=m.tags,
+        page_count=m.page_count,
+        cover_bytes=m.cover_bytes,
+    )
+
+
 async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str] | None:
     """Returns (book_id, status) where status ∈ {'created', 'updated', 'unchanged'}.
 
@@ -183,6 +213,8 @@ async def ingest_file(path: Path, *, library: str = "Default") -> tuple[str, str
         meta = await _extract_mobi(path, file_hash)
     elif fmt == "pdf":
         meta = await _extract_pdf(path)
+    elif fmt in {"cbz", "cbr"}:
+        meta = await _extract_comic(path)
     else:
         return None
 
@@ -259,7 +291,9 @@ async def _finalise_ingest(
     # metadata was decent (description present from EPUB OPF, say) this is a
     # cheap cache hit; if not, it actually fetches Google Books / Open Library.
     # Failures are logged and ignored — they don't block ingest.
-    if was_created:
+    # External enrichment rarely matches comic scans (Google Books / OpenLibrary)
+    # — skip it for CBZ/CBR.
+    if was_created and fmt not in {"cbz", "cbr"}:
         try:
             async with session_scope() as session:
                 from despereaux.repos.books import get_book

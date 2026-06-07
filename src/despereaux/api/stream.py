@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,7 @@ from despereaux.middleware.auth import current_user
 from despereaux.models import Download
 from despereaux.models.base import new_id
 from despereaux.repos import books as books_repo
+from despereaux.services.comic import read_page
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/books", tags=["stream"])
@@ -158,3 +160,42 @@ async def book_manifest(
         "page_count": book.page_count,
         "file_hash": book.file_hash,
     }
+
+
+@router.get("/{book_id}/page/{page}")
+async def serve_comic_page(
+    book_id: str,
+    page: int,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    _user=Depends(current_user),
+):
+    """Serve the nth page image (0-based) of a CBZ/CBR comic, extracted on demand."""
+    book = await books_repo.get_book(session, book_id)
+    if not book or book.format not in ("cbz", "cbr"):
+        raise HTTPException(status_code=404, detail="comic page not found")
+
+    path = Path(book.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=410, detail="file missing on disk")
+
+    etag = f'"{book.file_hash}:p{page}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+
+    # zipfile/rarfile reads are blocking (CBR shells out to unar) — offload so
+    # the event loop stays responsive.
+    try:
+        result = await run_in_threadpool(read_page, path, page)
+    except Exception as e:
+        log.warning("comic page read failed for %s p%d: %s", book_id, page, e)
+        raise HTTPException(status_code=500, detail="page read failed") from e
+    if result is None:
+        raise HTTPException(status_code=404, detail="page out of range")
+
+    data, content_type = result
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"},
+    )
