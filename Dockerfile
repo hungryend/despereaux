@@ -17,14 +17,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-# Calibre is baked in for MOBI/AZW conversion + fetch-ebook-metadata enrichment.
-# CBR support (Phase 2) will need an unrar-compatible tool — `unrar` moved to
-# Debian non-free in trixie, so we'll add `unar` or `unrar-free` when that
-# phase lands. For Phase 1 (EPUB only) neither is required.
+# Calibre: MOBI/AZW -> EPUB conversion + fetch-ebook-metadata enrichment.
+# unar: free RAR extractor used by `rarfile` to read CBR comics (`unrar` is
+# Debian non-free). CBZ needs no extra tool (stdlib zipfile).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         calibre \
         libmagic1 \
         libxml2 \
+        unar \
         ca-certificates \
         curl \
     && rm -rf /var/lib/apt/lists/*
