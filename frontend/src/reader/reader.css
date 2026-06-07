@@ -129,6 +129,13 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   background: white;
 }
 
+/* Comic page image — same centre/scroll behaviour as the PDF canvas. */
+.comic-page {
+  display: block;
+  margin: auto;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
 /* Floating PDF zoom control (bottom-center). */
 .pdf-zoom {
   position: fixed;
