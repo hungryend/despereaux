@@ -1,4 +1,5 @@
 import './reader.css'
+import { ComicReader } from './comic-reader'
 import { EpubReader } from './epub-reader'
 import { PdfReader } from './pdf-reader'
 import type { Reader } from './types'
@@ -20,8 +21,8 @@ async function bootstrap(): Promise<void> {
       break
     case 'cbz':
     case 'cbr':
-      renderUnsupported(`${cfg.format.toUpperCase()} reader arrives in Phase 2.3.`)
-      return
+      reader = new ComicReader(cfg)
+      break
     default:
       renderUnsupported(`Unsupported format: ${cfg.format}`)
       return
