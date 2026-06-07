@@ -29,7 +29,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+# Upgrade pip first — the base image's pip 25.0.1 has known CVEs (malicious-wheel
+# RCE, unsafe archive/symlink extraction, path traversal). pip only bootstraps uv.
+# Also drop the stale pip wheel bundled in ensurepip (uv never uses it) so Trivy
+# has no 25.0.1 left to flag.
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir uv \
+    && find /usr/local/lib -path '*/ensurepip/_bundled/*' -name 'pip-*.whl' -delete
 
 WORKDIR /app
 COPY pyproject.toml ./
