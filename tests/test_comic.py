@@ -161,9 +161,7 @@ async def test_ingest_comic_and_serve_page(tmp_path: Path) -> None:
         assert etag
 
         # Conditional GET → 304.
-        r304 = await client.get(
-            f"/api/books/{book_id}/page/0", headers={"if-none-match": etag}
-        )
+        r304 = await client.get(f"/api/books/{book_id}/page/0", headers={"if-none-match": etag})
         assert r304.status_code == 304
 
         # Out-of-range page → 404.

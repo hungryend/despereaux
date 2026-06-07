@@ -38,9 +38,7 @@ def _read_comicinfo(path: Path) -> dict[str, str]:
         return {}
     try:
         with zipfile.ZipFile(path) as zf:
-            name = next(
-                (n for n in zf.namelist() if n.lower().endswith("comicinfo.xml")), None
-            )
+            name = next((n for n in zf.namelist() if n.lower().endswith("comicinfo.xml")), None)
             if not name:
                 return {}
             root = ET.fromstring(zf.read(name))
@@ -49,7 +47,14 @@ def _read_comicinfo(path: Path) -> dict[str, str]:
         return {}
     out: dict[str, str] = {}
     for tag in (
-        "Title", "Series", "Number", "Writer", "Publisher", "Year", "Summary", "LanguageISO",
+        "Title",
+        "Series",
+        "Number",
+        "Writer",
+        "Publisher",
+        "Year",
+        "Summary",
+        "LanguageISO",
     ):
         el = root.find(tag)
         if el is not None and el.text and el.text.strip():
