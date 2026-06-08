@@ -122,3 +122,87 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy
+
+  publish:
+    name: Publish image (GHCR)
+    runs-on: ubuntu-latest
+    needs: [docker-build-scan]
+    # Only on merge to main (push), never on PRs / forks. Fork PRs have no
+    # package-write token and we never publish un-reviewed code.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 20
+    permissions:
+      contents: write   # create the version tag + GitHub release
+      packages: write   # push the image to ghcr.io via the built-in GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags so the version bump can read prior tags
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Rebuild from the gha cache (a cache hit — the scan job just populated it),
+      # load locally so we gate on a clean Trivy scan BEFORE tagging/publishing.
+      - name: Build for scan (cache hit)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: despereaux:publish-${{ github.sha }}
+          cache-from: type=gha
+
+      - name: Trivy gate (block publish on fixable CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: despereaux:publish-${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # Auto-version from conventional-commit messages since the last tag
+      # (feat -> minor, fix -> patch, BREAKING CHANGE / "!" -> major; default
+      # patch). Creates + pushes the vX.Y.Z git tag. Runs only after a clean scan
+      # so we never tag a release we didn't publish. Tag pushes don't re-trigger
+      # CI (the push trigger is filtered to branches: [main]).
+      - name: Bump version + create tag
+        id: tag
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+
+      - name: GitHub release (auto changelog)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.new_tag }}
+          name: ${{ steps.tag.outputs.new_tag }}
+          body: ${{ steps.tag.outputs.changelog }}
+
+      - name: Docker metadata (tags + OCI labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ steps.tag.outputs.new_version }}
+            type=sha,format=short
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          provenance: false
