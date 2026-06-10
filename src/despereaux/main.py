@@ -17,6 +17,7 @@ from despereaux.api import metadata as metadata_api
 from despereaux.api import progress as progress_api
 from despereaux.api import progress_list as progress_list_api
 from despereaux.api import stream as stream_api
+from despereaux.api import tokens as tokens_api
 from despereaux.config import get_settings
 from despereaux.db import apply_sqlite_pragmas
 from despereaux.middleware.auth import AuthentikUserMiddleware
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(progress_list_api.router)
     app.include_router(stream_api.router)
     app.include_router(admin_api.router)
+    app.include_router(tokens_api.router)
     app.include_router(web_routes.router)
 
     @app.get("/healthz", include_in_schema=False)
