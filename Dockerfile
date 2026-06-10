@@ -20,7 +20,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Calibre: MOBI/AZW -> EPUB conversion + fetch-ebook-metadata enrichment.
 # unar: free RAR extractor used by `rarfile` to read CBR comics (`unrar` is
 # Debian non-free). CBZ needs no extra tool (stdlib zipfile).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `upgrade` first: the slim base image rebuilds lag Debian point releases, and
+# the publish job's Trivy gate blocks on fixable CRITICAL/HIGH CVEs in base
+# packages (e.g. poppler/openssl) — pull the security updates at build time.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
         calibre \
         libmagic1 \
         libxml2 \
