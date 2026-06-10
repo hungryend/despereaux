@@ -18,6 +18,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 - Release workflow: GitHub Release creation on tag push needs `contents: write` permission on GITHUB_TOKEN; the v0.1.0 tag publication failed on this. The image itself was published to GHCR successfully.
 
+### Security
+- Base image packages are now `apt-get upgrade`d at build time — the slim base
+  lags Debian point releases, and newly disclosed fixable CVEs (poppler, OpenSSL)
+  were blocking the publish gate.
+- Removed the legacy `release.yml` workflow: it pushed `latest` to GHCR on every
+  main push **without** the Trivy gate, silently bypassing the gated publish job
+  in `ci.yml` (which tags, cuts the release, and only pushes after a clean scan).
+
 ## [0.1.0] — 2026-06-03
 
 ### Added
