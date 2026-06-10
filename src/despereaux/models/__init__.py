@@ -1,3 +1,4 @@
+from despereaux.models.api_token import ApiToken
 from despereaux.models.base import Base
 from despereaux.models.book import (
     Author,
@@ -13,6 +14,7 @@ from despereaux.models.progress import Bookmark, ReadingProgress
 from despereaux.models.user import User
 
 __all__ = [
+    "ApiToken",
     "Author",
     "Base",
     "Book",

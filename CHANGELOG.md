@@ -7,6 +7,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- Per-user, revocable API tokens for native clients (Furlough): admin
+  mint/list/revoke under `/api/admin/tokens`, accepted via
+  `Authorization: Bearer <token>` or the `despereaux_token` cookie (the cookie
+  exists for WebView subresource auth). Tokens are stored as SHA-256 hashes and
+  the plaintext is shown once at creation. New `GET /api/me` identity probe.
+  An explicitly presented invalid token is rejected with 401 even in dev mode.
+
 ### Fixed
 - Release workflow: GitHub Release creation on tag push needs `contents: write` permission on GITHUB_TOKEN; the v0.1.0 tag publication failed on this. The image itself was published to GHCR successfully.
 
