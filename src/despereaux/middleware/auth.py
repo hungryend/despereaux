@@ -6,6 +6,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from despereaux.config import get_settings
 from despereaux.db import session_scope
+from despereaux.models import User
+from despereaux.repos.api_tokens import resolve_api_token
 from despereaux.repos.users import get_or_create_user
 
 settings = get_settings()
@@ -14,6 +16,11 @@ settings = get_settings()
 # /api/admin/sync uses a shared token instead of Authentik (internal Docker callers).
 _PUBLIC_PATHS = ("/healthz", "/static/", "/favicon.ico", "/api/admin/sync")
 
+# Cookie fallback for clients that can't attach an Authorization header to every
+# request — concretely the Furlough WebView reader, whose subresource requests
+# (epub.js/PDF.js fetches under /read and /api) carry cookies but not headers.
+TOKEN_COOKIE = "despereaux_token"
+
 
 def _parse_groups(raw: str | None) -> list[str]:
     if not raw:
@@ -21,31 +28,72 @@ def _parse_groups(raw: str | None) -> list[str]:
     return [g.strip() for g in raw.split(",") if g.strip()]
 
 
+def _bearer_token(request: Request) -> str | None:
+    authorization = request.headers.get("authorization")
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    return authorization.split(" ", 1)[1].strip() or None
+
+
+def _attach(request: Request, user: User) -> None:
+    request.state.user_id = user.id
+    request.state.user_username = user.username
+    request.state.user_groups = list(user.authentik_groups or [])
+
+
 class AuthentikUserMiddleware(BaseHTTPMiddleware):
+    """Resolves the request's user, in priority order:
+
+    1. `X-authentik-*` headers — the SWAG/Authentik forward-auth path (web UI).
+    2. A per-user API token, via `Authorization: Bearer <token>` or the
+       `despereaux_token` cookie — native apps (Furlough) reaching the API
+       directly. An explicitly presented but invalid token is a hard 401 even
+       in dev mode, so a typo'd token can't silently turn into `devuser`.
+    3. Dev mode — auto-create an admin `devuser` (LAN / tests).
+    """
+
     async def dispatch(self, request: Request, call_next):
         if any(request.url.path.startswith(p) for p in _PUBLIC_PATHS):
             return await call_next(request)
 
         username = request.headers.get("x-authentik-username")
-        email = request.headers.get("x-authentik-email")
-        groups = _parse_groups(request.headers.get("x-authentik-groups"))
-
-        if not username:
-            if settings.dev_mode:
-                username, email, groups = "devuser", "dev@local", [settings.admin_group]
-            else:
-                return JSONResponse(
-                    {"detail": "no authentik headers; this endpoint must be reached via SWAG"},
-                    status_code=status.HTTP_401_UNAUTHORIZED,
+        if username:
+            email = request.headers.get("x-authentik-email")
+            groups = _parse_groups(request.headers.get("x-authentik-groups"))
+            async with session_scope() as session:
+                user = await get_or_create_user(
+                    session, username=username, email=email, groups=groups
                 )
+                _attach(request, user)
+            return await call_next(request)
 
-        async with session_scope() as session:
-            user = await get_or_create_user(session, username=username, email=email, groups=groups)
-            request.state.user_id = user.id
-            request.state.user_username = user.username
-            request.state.user_groups = list(user.authentik_groups or [])
+        token = _bearer_token(request) or request.cookies.get(TOKEN_COOKIE)
+        if token:
+            async with session_scope() as session:
+                user = await resolve_api_token(session, token)
+                if user is None:
+                    return JSONResponse(
+                        {"detail": "invalid or revoked API token"},
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                    )
+                _attach(request, user)
+            return await call_next(request)
 
-        return await call_next(request)
+        if settings.dev_mode:
+            async with session_scope() as session:
+                user = await get_or_create_user(
+                    session,
+                    username="devuser",
+                    email="dev@local",
+                    groups=[settings.admin_group],
+                )
+                _attach(request, user)
+            return await call_next(request)
+
+        return JSONResponse(
+            {"detail": "no authentik headers; this endpoint must be reached via SWAG"},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
 
 
 def current_user(request: Request) -> dict:
