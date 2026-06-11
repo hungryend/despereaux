@@ -60,10 +60,50 @@ async def get_api_token(session: AsyncSession, token_id: str) -> ApiToken | None
 
 
 async def list_api_tokens_for_user(session: AsyncSession, user_id: str) -> list[ApiToken]:
+    """The user's ADDITIONAL tokens — the default API key has its own endpoints."""
     result = await session.execute(
-        select(ApiToken).where(ApiToken.user_id == user_id).order_by(ApiToken.created_at.desc())
+        select(ApiToken)
+        .where(ApiToken.user_id == user_id, ApiToken.is_default.is_(False))
+        .order_by(ApiToken.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def get_or_create_default_token(session: AsyncSession, user_id: str) -> ApiToken:
+    """Each user's auto-created, revealable API key. Stored retrievably (unlike
+    additional tokens) so the Account page can re-show it on demand."""
+    result = await session.execute(
+        select(ApiToken).where(ApiToken.user_id == user_id, ApiToken.is_default.is_(True))
+    )
+    row = result.scalars().first()
+    if row is not None and row.stored_plaintext:
+        return row
+    if row is not None:
+        # Shouldn't happen (defaults always store plaintext), but heal anyway.
+        await session.delete(row)
+        await session.flush()
+    plaintext = TOKEN_PREFIX + secrets.token_urlsafe(32)
+    row = ApiToken(
+        user_id=user_id,
+        name="API key",
+        token_hash=_hash_token(plaintext),
+        is_default=True,
+        stored_plaintext=plaintext,
+    )
+    session.add(row)
+    await session.flush()
+    return row
+
+
+async def rotate_default_token(session: AsyncSession, user_id: str) -> ApiToken:
+    """Replace the default API key — the old one stops working immediately."""
+    result = await session.execute(
+        select(ApiToken).where(ApiToken.user_id == user_id, ApiToken.is_default.is_(True))
+    )
+    for old in result.scalars().all():
+        await session.delete(old)
+    await session.flush()
+    return await get_or_create_default_token(session, user_id)
 
 
 async def list_api_tokens(session: AsyncSession) -> list[tuple[ApiToken, str]]:

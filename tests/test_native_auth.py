@@ -209,6 +209,24 @@ def test_admin_user_management(native, client: TestClient) -> None:
     assert client.get("/api/me").json()["is_admin"] is True
 
 
+def test_logout_targets_per_mode(native, client: TestClient) -> None:
+    """Native: clear the session, land on /login. (The authentik-mode variant —
+    bounce to the outpost sign-out — is covered in the test below, which runs
+    without the native fixture.)"""
+    _ensure_admin_if_missing(client)
+    r = client.get("/logout", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login"
+
+
+def test_logout_in_authentik_mode_bounces_to_outpost(client: TestClient) -> None:
+    """The proxy session lives in the outpost, not despereaux — Sign out must
+    clear it there (also the escape hatch after an Authentik impersonation)."""
+    r = client.get("/logout", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/outpost.goauthentik.io/sign_out"
+
+
 def test_login_routes_in_authentik_mode(client: TestClient) -> None:
     """Default mode: no login page (the proxy gates), setup hidden."""
     r = client.get("/login", follow_redirects=False)

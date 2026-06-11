@@ -142,6 +142,45 @@ def test_self_service_tokens(client: TestClient) -> None:
     assert client.delete(f"/api/tokens/{own['id']}").status_code == 204
 
 
+def test_default_api_key_lifecycle(client: TestClient) -> None:
+    """Every user gets an auto-created, re-revealable API key: idempotent fetch,
+    per-user isolation, excluded from the additional-tokens list, rotation kills
+    the old key."""
+    first = client.get("/api/tokens/default")
+    assert first.status_code == 200, first.text
+    key = first.json()["token"]
+    assert key.startswith("desp_")
+    # Re-reveal returns the SAME key (that's the point vs. shown-once tokens).
+    assert client.get("/api/tokens/default").json()["token"] == key
+
+    # It authenticates as its owner (devuser here).
+    r = client.get("/api/me", headers={"Authorization": f"Bearer {key}"})
+    assert r.status_code == 200
+    assert r.json()["username"] == "devuser"
+
+    # Not listed among additional tokens.
+    assert all(t["id"] != first.json()["id"] for t in client.get("/api/tokens").json())
+
+    # Another user sees their OWN key, not devuser's.
+    judy = _mint(client, "judy-key", "judy-phone")
+    judys = client.get(
+        "/api/tokens/default", headers={"Authorization": f"Bearer {judy['token']}"}
+    ).json()["token"]
+    assert judys != key
+    me = client.get("/api/me", headers={"Authorization": f"Bearer {judys}"})
+    assert me.json()["username"] == "judy-key"
+
+    # Rotation: old key dies, new key works.
+    rotated = client.post("/api/tokens/default/rotate")
+    assert rotated.status_code == 201
+    new_key = rotated.json()["token"]
+    assert new_key != key
+    assert client.get("/api/me", headers={"Authorization": f"Bearer {key}"}).status_code == 401
+    r = client.get("/api/me", headers={"Authorization": f"Bearer {new_key}"})
+    assert r.status_code == 200
+    assert client.get("/api/tokens/default").json()["token"] == new_key
+
+
 def test_token_works_on_real_api_routes(client: TestClient) -> None:
     token = _mint(client, "ivan")["token"]
     r = client.get("/api/books", headers={"Authorization": f"Bearer {token}"})
