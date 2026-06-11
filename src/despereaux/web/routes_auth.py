@@ -87,9 +87,18 @@ async def login_submit(
 
 @router.get("/logout")
 async def logout():
-    target = "/login" if get_settings().auth_mode == "native" else "/"
-    response = RedirectResponse(url=target, status_code=303)
-    response.delete_cookie(SESSION_COOKIE, path="/")
+    """Sign out of THIS app. Native mode: clear the despereaux session and land
+    on /login. Authentik mode: despereaux holds no session of its own — the
+    identity lives in the outpost's per-app proxy session, so bounce to the
+    outpost sign-out endpoint (which clears it and re-auths on next visit;
+    that's also how you switch users after an Authentik impersonation)."""
+    if get_settings().auth_mode == "native":
+        response = RedirectResponse(url="/login", status_code=303)
+        response.delete_cookie(SESSION_COOKIE, path="/")
+    else:
+        response = RedirectResponse(url="/outpost.goauthentik.io/sign_out", status_code=303)
+    # Either way, drop a lingering token cookie (the WebView reader path).
+    response.delete_cookie("despereaux_token", path="/")
     return response
 
 
