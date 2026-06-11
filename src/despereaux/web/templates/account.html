@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Account · despereaux{% endblock %}
+{% block content %}
+<div class="settings-page">
+  <h1>Account</h1>
+  <p class="settings-sub">Signed in as <strong>{{ user.username }}</strong>{% if user.is_admin %} · admin{% endif %}</p>
+  {% if msg %}<p class="form-ok">{{ msg }}</p>{% endif %}
+  {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+  <section class="settings-card">
+    <h2>API tokens</h2>
+    <p class="settings-sub">Tokens let apps (like the Furlough reader) sign in as you without a
+      browser. A token is shown <strong>once</strong> when created — copy it straight into the app.
+      Revoke any token to sign that device out.</p>
+
+    <form id="token-create" class="inline-form">
+      <input type="text" id="token-name" placeholder="Device name, e.g. my-phone" required maxlength="60" />
+      <button class="btn btn-primary btn-small" type="submit">Generate token</button>
+    </form>
+
+    <div id="token-fresh" class="token-fresh" hidden>
+      <p>Your new token — copy it now, it won't be shown again:</p>
+      <div class="token-row">
+        <code id="token-value"></code>
+        <button class="btn btn-small" id="token-copy" type="button">Copy</button>
+      </div>
+    </div>
+
+    <table class="settings-table" id="token-table" hidden>
+      <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="token-empty" class="settings-sub" hidden>No tokens yet.</p>
+  </section>
+
+  {% if auth_mode() == "native" %}
+  <section class="settings-card">
+    <h2>Password</h2>
+    <form method="post" action="/account/password" class="stacked-form">
+      {% if has_password %}
+      <label>Current password
+        <input type="password" name="current_password" autocomplete="current-password" required />
+      </label>
+      {% endif %}
+      <label>New password <span class="hint">(min 8 characters)</span>
+        <input type="password" name="new_password" autocomplete="new-password" minlength="8" required />
+      </label>
+      <button class="btn btn-primary btn-small" type="submit">Change password</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const table = document.getElementById("token-table");
+  const tbody = table.querySelector("tbody");
+  const empty = document.getElementById("token-empty");
+
+  function fmt(ts) {
+    if (!ts) return "never";
+    const d = new Date(ts);
+    return isNaN(d) ? ts : d.toLocaleString();
+  }
+
+  async function refresh() {
+    const res = await fetch("/api/tokens", { headers: { Accept: "application/json" } });
+    if (!res.ok) return;
+    const tokens = await res.json();
+    tbody.innerHTML = "";
+    for (const t of tokens) {
+      const tr = document.createElement("tr");
+      const revoke = `<button class="btn btn-danger btn-small" data-id="${t.id}">Revoke</button>`;
+      tr.innerHTML = `<td>${t.name.replace(/[<>&]/g, "")}</td>` +
+        `<td>${fmt(t.created_at)}</td><td>${fmt(t.last_used_at)}</td><td>${revoke}</td>`;
+      tbody.appendChild(tr);
+    }
+    table.hidden = tokens.length === 0;
+    empty.hidden = tokens.length !== 0;
+  }
+
+  tbody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-id]");
+    if (!btn || !confirm("Revoke this token? The device using it will be signed out.")) return;
+    await fetch(`/api/tokens/${btn.dataset.id}`, { method: "DELETE" });
+    refresh();
+  });
+
+  document.getElementById("token-create").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const nameInput = document.getElementById("token-name");
+    const res = await fetch("/api/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ name: nameInput.value.trim() }),
+    });
+    if (!res.ok) { alert("Couldn't create the token."); return; }
+    const body = await res.json();
+    document.getElementById("token-value").textContent = body.token;
+    document.getElementById("token-fresh").hidden = false;
+    nameInput.value = "";
+    refresh();
+  });
+
+  document.getElementById("token-copy").addEventListener("click", async () => {
+    const value = document.getElementById("token-value").textContent;
+    try {
+      await navigator.clipboard.writeText(value);
+      document.getElementById("token-copy").textContent = "Copied!";
+    } catch {
+      /* clipboard blocked (non-https?) — the token is selectable text */
+    }
+  });
+
+  refresh();
+})();
+</script>
+{% endblock %}

@@ -55,6 +55,17 @@ async def resolve_api_token(session: AsyncSession, token: str) -> User | None:
     return user
 
 
+async def get_api_token(session: AsyncSession, token_id: str) -> ApiToken | None:
+    return await session.get(ApiToken, token_id)
+
+
+async def list_api_tokens_for_user(session: AsyncSession, user_id: str) -> list[ApiToken]:
+    result = await session.execute(
+        select(ApiToken).where(ApiToken.user_id == user_id).order_by(ApiToken.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def list_api_tokens(session: AsyncSession) -> list[tuple[ApiToken, str]]:
     """All tokens with their owner's username, newest first."""
     result = await session.execute(
