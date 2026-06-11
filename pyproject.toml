@@ -21,6 +21,7 @@ dependencies = [
     "uuid-utils>=0.10",
     "python-multipart>=0.0.20",
     "rapidfuzz>=3.10",
+    "bcrypt>=4.1",
 ]
 
 [project.optional-dependencies]

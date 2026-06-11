@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Users · despereaux{% endblock %}
+{% block content %}
+<div class="settings-page">
+  <h1>Users</h1>
+  <p class="settings-sub">
+    {% if auth_mode() == "native" %}
+    Users sign in with a username and password. Accounts without a password are
+    token-only (apps) until you set one.
+    {% else %}
+    Identity comes from your forward-auth provider (Authentik) — accounts are
+    created automatically on first web sign-in. Create one here ahead of time to
+    pre-provision a username or mint app tokens for it.
+    {% endif %}
+    Everyone manages their own API tokens on their <a href="/account">Account</a> page.
+  </p>
+  {% if msg %}<p class="form-ok">{{ msg }}</p>{% endif %}
+  {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+  <section class="settings-card">
+    <h2>Create user</h2>
+    <form method="post" action="/admin/users/create" class="inline-form wrap">
+      <input type="text" name="username" placeholder="username" required maxlength="60" />
+      <input type="password" name="password" placeholder="password{% if auth_mode() != 'native' %} (optional){% endif %}"
+             {% if auth_mode() == "native" %}minlength="8"{% endif %} autocomplete="new-password" />
+      <label class="checkbox"><input type="checkbox" name="is_admin" value="true" /> admin</label>
+      <button class="btn btn-primary btn-small" type="submit">Create</button>
+    </form>
+  </section>
+
+  <section class="settings-card">
+    <h2>All users</h2>
+    <table class="settings-table">
+      <thead>
+        <tr><th>Username</th><th>Role</th><th>Sign-in</th><th>Tokens</th><th>Last seen</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.username }}{% if u.id == user.id %} <span class="hint">(you)</span>{% endif %}</td>
+          <td>
+            {% if u.is_admin or (u.groups and admin_group() in u.groups) %}admin{% else %}member{% endif %}
+            {% if u.groups %}<span class="hint" title="authentik groups">· {{ u.groups|join(", ") }}</span>{% endif %}
+          </td>
+          <td>{% if u.has_password %}password{% elif u.groups or u.email %}authentik{% else %}token-only{% endif %}</td>
+          <td>{{ u.token_count }}</td>
+          <td>{{ u.last_seen_at.strftime("%Y-%m-%d") if u.last_seen_at else "—" }}</td>
+          <td class="actions-cell">
+            <form method="post" action="/admin/users/{{ u.id }}/password" class="inline-form">
+              <input type="password" name="password" placeholder="new password" minlength="8" required autocomplete="new-password" />
+              <button class="btn btn-small" type="submit">Set password</button>
+            </form>
+            {% if u.id != user.id %}
+            <form method="post" action="/admin/users/{{ u.id }}/admin" class="inline-form">
+              <input type="hidden" name="make_admin" value="{{ "false" if u.is_admin else "true" }}" />
+              <button class="btn btn-small {% if u.is_admin %}btn-danger{% endif %}" type="submit">
+                {{ "Remove admin" if u.is_admin else "Make admin" }}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

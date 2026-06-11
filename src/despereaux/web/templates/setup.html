@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>First-run setup · despereaux</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body>
+    <main class="auth-page">
+      <form class="auth-card" method="post" action="/setup">
+        <img src="/static/img/logo.svg" alt="" class="auth-logo" />
+        <h1>Welcome to despereaux</h1>
+        <p class="auth-sub">Create the administrator account to get started.
+          You can add more users afterwards under <strong>Users</strong>.</p>
+        {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+        <label>Admin username
+          <input type="text" name="username" autocomplete="username" autofocus required />
+        </label>
+        <label>Password <span class="hint">(min 8 characters)</span>
+          <input type="password" name="password" autocomplete="new-password" minlength="8" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Create admin account</button>
+      </form>
+    </main>
+  </body>
+</html>
