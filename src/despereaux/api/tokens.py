@@ -46,6 +46,40 @@ async def list_own_tokens(
     ]
 
 
+@router.get("/tokens/default")
+async def reveal_default_token(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+):
+    """The calling user's auto-created API key, including its plaintext.
+
+    Unlike additional tokens this one is stored retrievably so it can be
+    re-shown (the Sonarr/Radarr-style API-key trade-off). Created lazily on
+    first request.
+    """
+    row = await tokens_repo.get_or_create_default_token(session, user["id"])
+    await session.commit()
+    return {
+        "id": row.id,
+        "name": row.name,
+        "token": row.stored_plaintext,
+        "created_at": row.created_at,
+        "last_used_at": row.last_used_at,
+    }
+
+
+@router.post("/tokens/default/rotate", status_code=201)
+async def rotate_default_token(
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+):
+    """Replace the API key — anything using the old one is signed out."""
+    row = await tokens_repo.rotate_default_token(session, user["id"])
+    await session.commit()
+    log.info("default api key rotated: user=%s", user["username"])
+    return {"id": row.id, "name": row.name, "token": row.stored_plaintext}
+
+
 @router.post("/tokens", status_code=201)
 async def create_own_token(
     body: OwnTokenCreateRequest,
