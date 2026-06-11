@@ -113,6 +113,35 @@ def test_blank_fields_rejected(client: TestClient) -> None:
     assert r.status_code == 422
 
 
+def test_self_service_tokens(client: TestClient) -> None:
+    """Any signed-in user mints/lists/revokes their OWN tokens via /api/tokens
+    (the Account page API). Other users' tokens are invisible — 404, not 403."""
+    # devuser mints for itself.
+    r = client.post("/api/tokens", json={"name": "devuser-own"})
+    assert r.status_code == 201, r.text
+    own = r.json()
+    assert own["token"].startswith("desp_")
+
+    listed = client.get("/api/tokens").json()
+    assert any(t["id"] == own["id"] for t in listed)
+    assert all("token" not in t and "token_hash" not in t for t in listed)
+
+    # Another user's token (admin-minted) must not appear in devuser's list,
+    # and devuser can't revoke it through the self-service route.
+    judy = _mint(client, "judy", "judy-phone")
+    assert all(t["id"] != judy["id"] for t in client.get("/api/tokens").json())
+    assert client.delete(f"/api/tokens/{judy['id']}").status_code == 404
+
+    # Judy CAN see and revoke her own via her bearer token.
+    auth = {"Authorization": f"Bearer {judy['token']}"}
+    mine = client.get("/api/tokens", headers=auth).json()
+    assert [t["id"] for t in mine] == [judy["id"]]
+    assert client.delete(f"/api/tokens/{judy['id']}", headers=auth).status_code == 204
+
+    # Cleanup devuser's token.
+    assert client.delete(f"/api/tokens/{own['id']}").status_code == 204
+
+
 def test_token_works_on_real_api_routes(client: TestClient) -> None:
     token = _mint(client, "ivan")["token"]
     r = client.get("/api/books", headers={"Authorization": f"Bearer {token}"})

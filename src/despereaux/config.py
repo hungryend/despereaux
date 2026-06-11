@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,22 @@ class Settings(BaseSettings):
 
     dev_mode: bool = False
     admin_group: str = "ebook-admin"
+
+    # === Authentication mode ===
+    # "authentik": trust X-authentik-* identity headers injected by a reverse
+    #   proxy running forward-auth (Authentik/Authelia/Keycloak). The app has
+    #   no login page; the proxy is the gate. DEFAULT — existing deployments
+    #   keep working unchanged.
+    # "native": despereaux's own login page + bcrypt passwords + signed session
+    #   cookie. X-authentik-* headers are IGNORED (they'd be spoofable without
+    #   a trusted proxy). First run redirects to /setup to create the admin.
+    # Per-user API tokens (Authorization: Bearer / despereaux_token cookie)
+    # work identically in BOTH modes.
+    auth_mode: Literal["authentik", "native"] = "authentik"
+
+    # Secret for signing native-mode session cookies. If unset, one is
+    # generated and persisted at {data_dir}/session-secret on first use.
+    session_secret: str | None = None
 
     # Shared token for /api/admin/sync (chaptarr or other internal callers).
     webhook_token: str | None = None

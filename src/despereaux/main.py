@@ -20,9 +20,10 @@ from despereaux.api import stream as stream_api
 from despereaux.api import tokens as tokens_api
 from despereaux.config import get_settings
 from despereaux.db import apply_sqlite_pragmas
-from despereaux.middleware.auth import AuthentikUserMiddleware
+from despereaux.middleware.auth import AuthUserMiddleware
 from despereaux.services.scanner import scanner
 from despereaux.web import routes as web_routes
+from despereaux.web import routes_auth as web_auth_routes
 
 settings = get_settings()
 
@@ -115,7 +116,7 @@ def create_app() -> FastAPI:
     static_dir = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    app.add_middleware(AuthentikUserMiddleware)
+    app.add_middleware(AuthUserMiddleware)
 
     app.include_router(books_api.router)
     app.include_router(libraries_api.router)
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_api.router)
     app.include_router(tokens_api.router)
     app.include_router(web_routes.router)
+    app.include_router(web_auth_routes.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict:

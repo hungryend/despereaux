@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Sign in · despereaux</title>
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body>
+    <main class="auth-page">
+      <form class="auth-card" method="post" action="/login">
+        <img src="/static/img/logo.svg" alt="" class="auth-logo" />
+        <h1>despereaux</h1>
+        <p class="auth-sub">Sign in to your library</p>
+        {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+        <label>Username
+          <input type="text" name="username" autocomplete="username" autofocus required />
+        </label>
+        <label>Password
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Sign in</button>
+      </form>
+    </main>
+  </body>
+</html>

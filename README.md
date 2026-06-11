@@ -94,10 +94,31 @@ All options are environment variables on the container. **None are required** �
 
 ### Authentication
 
+despereaux supports two auth modes, selected with `DESPEREAUX_AUTH_MODE`:
+
+- **`native`** — despereaux's own login page. Passwords are bcrypt-hashed and
+  sessions ride a signed HTTP-only cookie. On first run you're redirected to
+  `/setup` to create the admin account; after that, manage users at
+  `/admin/users`. Pick this if you don't run an identity provider.
+- **`authentik`** (default) — identity comes from `X-authentik-*` headers
+  injected by a forward-auth reverse proxy (Authentik, Authelia, Keycloak…).
+  despereaux has no login page; the proxy is the gate (see "Reverse-proxy
+  authentication" below). In this mode despereaux must only be reachable
+  through the proxy — the headers are trusted.
+
+In **both** modes every signed-in user can mint **per-user API tokens** on the
+`/account` page (shown once, copy-paste into a client app). Clients send
+`Authorization: Bearer <token>` — or the `despereaux_token` cookie for WebView
+embedding — and authenticate as the owning user. In native mode the
+`X-authentik-*` headers are ignored entirely, since without a trusted proxy
+they would be client-controlled.
+
 | Variable | Default | Description |
 |---|---|---|
-| `DESPEREAUX_DEV_MODE` | `true` | When `true`, a placeholder `devuser` is auto-created and external auth is bypassed. Set `false` to require auth headers from an upstream reverse proxy (see "Reverse-proxy authentication" below). |
-| `DESPEREAUX_ADMIN_GROUP` | `ebook-admin` | Name of the group required to call admin endpoints (`/api/admin/*`) when not in dev mode. Group membership is read from the `X-authentik-groups` header. |
+| `DESPEREAUX_AUTH_MODE` | `authentik` | `authentik` (forward-auth headers) or `native` (built-in login page + user management). |
+| `DESPEREAUX_SESSION_SECRET` | *(generated)* | Secret signing native-mode session cookies. If unset, one is generated and persisted at `{DATA_DIR}/session-secret`. |
+| `DESPEREAUX_DEV_MODE` | `true` | When `true`, a placeholder `devuser` is auto-created and auth is bypassed for credential-less requests. Set `false` in any real deployment. |
+| `DESPEREAUX_ADMIN_GROUP` | `ebook-admin` | Authentik-mode: members of this group (from `X-authentik-groups`) are admins. Native-mode admins are flagged per-user in `/admin/users` instead. |
 
 ### Multiple libraries (optional)
 
