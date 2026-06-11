@@ -30,7 +30,13 @@
         {% if current_library %}<input type="hidden" name="library" value="{{ current_library }}" />{% endif %}
         <input type="search" name="search" value="{{ search|default('', true) }}" placeholder="Search title or author" />
       </form>
-      <div class="user">{{ user.username }}</div>
+      {% if user %}
+      <nav class="user-nav">
+        {% if user.is_admin %}<a class="user-link" href="/admin/users">Users</a>{% endif %}
+        <a class="user-link user-name" href="/account" title="Account & API tokens">{{ user.username }}</a>
+        {% if auth_mode() == "native" %}<a class="user-link" href="/logout">Sign out</a>{% endif %}
+      </nav>
+      {% endif %}
     </header>
     <main>
       {% block content %}{% endblock %}
