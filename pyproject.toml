@@ -26,8 +26,8 @@ dependencies = [
 
 [project.optional-dependencies]
 formats = [
-    "pypdf>=5.1",
-    "pypdfium2>=4.30",
+    "pypdf>=6.13.2",
+    "pypdfium2>=5.9.0",
     "rarfile>=4.2",
 ]
 
