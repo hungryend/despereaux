@@ -8,6 +8,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Per-user default API key, revealable on demand**: every user automatically
+  gets an "API key" on their Account page — masked until revealed, with Copy
+  and Regenerate buttons — for pasting into client apps (Furlough). Unlike
+  additional tokens (still stored hash-only, shown once), the default key is
+  stored retrievably so it can be re-shown — the same trade-off Sonarr/Radarr/
+  Plex make. Endpoints: `GET /api/tokens/default`, `POST /api/tokens/default/rotate`.
+- **User menu in the header**: clicking your username opens Account / Users
+  (admins) / **Sign out**. Sign out now works in both auth modes — in authentik
+  mode it bounces to the outpost's per-app sign-out, which clears the proxy
+  session (also the fix for "still signed in as the old user" after an
+  Authentik impersonation).
+
+## [0.4.0] — 2026-06-11
+
+### Added
 - **Native authentication mode** (`DESPEREAUX_AUTH_MODE=native`): despereaux's
   own login page with bcrypt passwords and signed session cookies — no reverse
   proxy or identity provider required. First run redirects to `/setup` to
@@ -22,6 +37,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Furlough, see last-used times, and revoke them. Backed by new self-service
   endpoints `GET/POST /api/tokens` + `DELETE /api/tokens/{id}` (own tokens
   only). Native mode adds self-service password change.
+
+## [0.3.0] — 2026-06-10
+
+### Added
 - Per-user, revocable API tokens for native clients (Furlough): admin
   mint/list/revoke under `/api/admin/tokens`, accepted via
   `Authorization: Bearer <token>` or the `despereaux_token` cookie (the cookie

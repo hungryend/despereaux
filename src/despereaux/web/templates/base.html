@@ -31,11 +31,14 @@
         <input type="search" name="search" value="{{ search|default('', true) }}" placeholder="Search title or author" />
       </form>
       {% if user %}
-      <nav class="user-nav">
-        {% if user.is_admin %}<a class="user-link" href="/admin/users">Users</a>{% endif %}
-        <a class="user-link user-name" href="/account" title="Account & API tokens">{{ user.username }}</a>
-        {% if auth_mode() == "native" %}<a class="user-link" href="/logout">Sign out</a>{% endif %}
-      </nav>
+      <details class="user-menu">
+        <summary class="user-name">{{ user.username }}</summary>
+        <nav class="user-menu-list">
+          <a href="/account">Account &amp; API key</a>
+          {% if user.is_admin %}<a href="/admin/users">Users</a>{% endif %}
+          <a href="/logout">Sign out</a>
+        </nav>
+      </details>
       {% endif %}
     </header>
     <main>

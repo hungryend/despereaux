@@ -8,13 +8,26 @@
   {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 
   <section class="settings-card">
-    <h2>API tokens</h2>
-    <p class="settings-sub">Tokens let apps (like the Furlough reader) sign in as you without a
-      browser. A token is shown <strong>once</strong> when created — copy it straight into the app.
-      Revoke any token to sign that device out.</p>
+    <h2>Your API key</h2>
+    <p class="settings-sub">Use this key to sign apps (like the Furlough reader) in as you —
+      paste it into the app's API-token field. Keep it secret; regenerating signs out
+      everything that uses it.</p>
+    <div class="token-row">
+      <code id="apikey-value" data-state="masked">desp_••••••••••••••••••••••••••••</code>
+      <button class="btn btn-small" id="apikey-reveal" type="button">Reveal</button>
+      <button class="btn btn-small" id="apikey-copy" type="button">Copy</button>
+      <button class="btn btn-danger btn-small" id="apikey-rotate" type="button">Regenerate</button>
+    </div>
+    <p class="hint" id="apikey-meta"></p>
+  </section>
+
+  <section class="settings-card">
+    <h2>Additional tokens</h2>
+    <p class="settings-sub">Optional named tokens — handy for a second device you may want to
+      sign out individually. Each is shown <strong>once</strong> when created.</p>
 
     <form id="token-create" class="inline-form">
-      <input type="text" id="token-name" placeholder="Device name, e.g. my-phone" required maxlength="60" />
+      <input type="text" id="token-name" placeholder="Device name, e.g. my-tablet" required maxlength="60" />
       <button class="btn btn-primary btn-small" type="submit">Generate token</button>
     </form>
 
@@ -30,7 +43,7 @@
       <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
-    <p id="token-empty" class="settings-sub" hidden>No tokens yet.</p>
+    <p id="token-empty" class="settings-sub" hidden>No additional tokens.</p>
   </section>
 
   {% if auth_mode() == "native" %}
@@ -54,15 +67,69 @@
 {% block scripts %}
 <script>
 (function () {
-  const table = document.getElementById("token-table");
-  const tbody = table.querySelector("tbody");
-  const empty = document.getElementById("token-empty");
-
   function fmt(ts) {
     if (!ts) return "never";
     const d = new Date(ts);
     return isNaN(d) ? ts : d.toLocaleString();
   }
+
+  // ----- default API key (masked until revealed; copy works without revealing) -----
+  const keyEl = document.getElementById("apikey-value");
+  const revealBtn = document.getElementById("apikey-reveal");
+  const MASK = "desp_••••••••••••••••••••••••••••";
+  let apiKey = null;
+
+  async function fetchKey() {
+    if (apiKey) return apiKey;
+    const res = await fetch("/api/tokens/default", { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error("fetch failed");
+    const body = await res.json();
+    apiKey = body.token;
+    document.getElementById("apikey-meta").textContent =
+      `Created ${fmt(body.created_at)} · last used ${fmt(body.last_used_at)}`;
+    return apiKey;
+  }
+  fetchKey().catch(() => {});  // prefetch metadata; key stays masked
+
+  revealBtn.addEventListener("click", async () => {
+    if (keyEl.dataset.state === "masked") {
+      keyEl.textContent = await fetchKey();
+      keyEl.dataset.state = "shown";
+      revealBtn.textContent = "Hide";
+    } else {
+      keyEl.textContent = MASK;
+      keyEl.dataset.state = "masked";
+      revealBtn.textContent = "Reveal";
+    }
+  });
+
+  document.getElementById("apikey-copy").addEventListener("click", async (e) => {
+    try {
+      await navigator.clipboard.writeText(await fetchKey());
+      e.target.textContent = "Copied!";
+      setTimeout(() => (e.target.textContent = "Copy"), 2000);
+    } catch {
+      alert("Clipboard unavailable — use Reveal and copy manually.");
+    }
+  });
+
+  document.getElementById("apikey-rotate").addEventListener("click", async () => {
+    if (!confirm("Regenerate your API key? Every app using the current one will be signed out.")) return;
+    const res = await fetch("/api/tokens/default/rotate", {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) { alert("Couldn't regenerate the key."); return; }
+    apiKey = (await res.json()).token;
+    keyEl.textContent = apiKey;
+    keyEl.dataset.state = "shown";
+    revealBtn.textContent = "Hide";
+  });
+
+  // ----- additional (hashed, shown-once) tokens -----
+  const table = document.getElementById("token-table");
+  const tbody = table.querySelector("tbody");
+  const empty = document.getElementById("token-empty");
 
   async function refresh() {
     const res = await fetch("/api/tokens", { headers: { Accept: "application/json" } });
