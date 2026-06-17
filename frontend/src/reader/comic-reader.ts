@@ -364,6 +364,30 @@ export class ComicReader implements Reader {
     return []
   }
 
+  // === Read-aloud (Furlough TTS bridge) — comics are images, no text. ===
+
+  hasReadableText(): boolean {
+    return false
+  }
+
+  canHighlight(): boolean {
+    return false
+  }
+
+  async ttsBeginSection(): Promise<{ texts: string[]; start: number }> {
+    return { texts: [], start: 0 }
+  }
+
+  async ttsAdvanceSection(): Promise<boolean> {
+    return false
+  }
+
+  async ttsHighlightUnit(_index: number): Promise<void> {}
+
+  async ttsHighlightWord(_index: number, _start: number, _end: number): Promise<void> {}
+
+  async ttsClearHighlight(): Promise<void> {}
+
   destroy(): void {
     this.img.remove()
     this.zoomControls?.remove()
