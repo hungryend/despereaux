@@ -31,6 +31,7 @@ async function bootstrap(): Promise<void> {
   try {
     await reader.start()
     wireNavButtons(reader)
+    installTtsBridge(reader)
   } catch (e) {
     console.error('reader failed to start', e)
     renderUnsupported('Reader failed to start — check the console.')
@@ -51,6 +52,33 @@ function wireNavButtons(reader: Reader): void {
     e.stopPropagation()
     reader.next()
   })
+}
+
+// Exposed to the Furlough Android app over the WebView JS bridge. The app calls
+// these (async ones via a @JavascriptInterface callback) to read the book aloud.
+interface FurloughTtsBridge {
+  capabilities(): { hasText: boolean; canHighlight: boolean; format: string }
+  beginSection(): Promise<{ texts: string[]; start: number }>
+  advanceSection(): Promise<boolean>
+  highlightUnit(index: number): Promise<void>
+  highlightWord(index: number, start: number, end: number): Promise<void>
+  clearHighlight(): Promise<void>
+}
+
+function installTtsBridge(reader: Reader): void {
+  const api: FurloughTtsBridge = {
+    capabilities: () => ({
+      hasText: reader.hasReadableText(),
+      canHighlight: reader.canHighlight(),
+      format: window.DESPEREAUX_BOOK?.format ?? '',
+    }),
+    beginSection: () => reader.ttsBeginSection(),
+    advanceSection: () => reader.ttsAdvanceSection(),
+    highlightUnit: (i) => reader.ttsHighlightUnit(i),
+    highlightWord: (i, s, e) => reader.ttsHighlightWord(i, s, e),
+    clearHighlight: () => reader.ttsClearHighlight(),
+  }
+  ;(window as unknown as { __furloughTts: FurloughTtsBridge }).__furloughTts = api
 }
 
 function renderUnsupported(msg: string): void {

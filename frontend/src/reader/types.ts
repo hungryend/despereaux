@@ -33,4 +33,14 @@ export interface Reader {
   goTo(href: string): void
   destroy(): void
   toc(): TocItem[]
+  // Read-aloud (Furlough TTS bridge). A section is tokenized into ordered "units"
+  // (sentences for EPUB, the whole page for PDF); the app speaks them in order and
+  // the reader highlights + turns pages to follow. Comics expose nothing.
+  hasReadableText(): boolean
+  canHighlight(): boolean
+  ttsBeginSection(): Promise<{ texts: string[]; start: number }>
+  ttsAdvanceSection(): Promise<boolean>
+  ttsHighlightUnit(index: number): Promise<void>
+  ttsHighlightWord(index: number, start: number, end: number): Promise<void>
+  ttsClearHighlight(): Promise<void>
 }

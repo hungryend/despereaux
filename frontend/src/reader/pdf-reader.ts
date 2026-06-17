@@ -467,6 +467,55 @@ export class PdfReader implements Reader {
     return []
   }
 
+  // === Read-aloud (Furlough TTS bridge) ===
+
+  hasReadableText(): boolean {
+    return true
+  }
+
+  // PDF pages render to a canvas (no selectable DOM text), so we can read aloud
+  // but can't highlight without building a text-layer overlay first.
+  canHighlight(): boolean {
+    return false
+  }
+
+  // One "unit" per page: the page's text layer. Empty for scanned/image PDFs (no
+  // text layer) — the app surfaces that as "no readable text" rather than silence.
+  async ttsBeginSection(): Promise<{ texts: string[]; start: number }> {
+    if (!this.pdf) return { texts: [], start: 0 }
+    try {
+      const page = await this.pdf.getPage(this.currentPage)
+      const tc = await page.getTextContent()
+      const text = tc.items
+        .map((it: any) => (typeof it?.str === 'string' ? it.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      return { texts: text ? [text] : [], start: 0 }
+    } catch {
+      return { texts: [], start: 0 }
+    }
+  }
+
+  async ttsAdvanceSection(): Promise<boolean> {
+    if (!this.pdf) return false
+    if (this.currentPage >= this.numPages) return false
+    await this.goToPage(this.currentPage + 1, false, true)
+    return true
+  }
+
+  async ttsHighlightUnit(_index: number): Promise<void> {
+    /* no text layer to highlight */
+  }
+
+  async ttsHighlightWord(_index: number, _start: number, _end: number): Promise<void> {
+    /* no text layer to highlight */
+  }
+
+  async ttsClearHighlight(): Promise<void> {
+    /* nothing to clear */
+  }
+
   destroy(): void {
     this.renderTask?.cancel()
     void this.pdf?.destroy()
