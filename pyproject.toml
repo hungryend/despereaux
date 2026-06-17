@@ -19,7 +19,7 @@ dependencies = [
     "watchfiles>=1.0",
     "structlog>=24.4",
     "uuid-utils>=0.10",
-    "python-multipart>=0.0.20",
+    "python-multipart>=0.0.31",
     "rapidfuzz>=3.10",
     "bcrypt>=4.1",
 ]
