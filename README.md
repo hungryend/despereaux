@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/hungryend/despereaux/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hungryend/despereaux/actions/workflows/ci.yml/badge.svg"/></a>
-  <a href="https://github.com/hungryend/despereaux/actions/workflows/release.yml"><img alt="Release" src="https://github.com/hungryend/despereaux/actions/workflows/release.yml/badge.svg"/></a>
+  <a href="https://github.com/hungryend/despereaux/releases"><img alt="Release" src="https://img.shields.io/github/v/release/hungryend/despereaux"/></a>
   <a href="https://github.com/hungryend/despereaux/pkgs/container/despereaux"><img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-hungryend%2Fdespereaux-blue?logo=docker"/></a>
 </p>
 
@@ -273,7 +273,7 @@ Requires Python 3.12+, Node 22+, and Calibre on the host PATH for MOBI/AZW conve
 ## CI/CD
 
 - **CI** (`.github/workflows/ci.yml`) runs on every PR + push: ruff lint + format, pytest with coverage, pip-audit, npm audit, Docker build, Trivy scan → uploaded to GitHub Code Scanning.
-- **Release** (`.github/workflows/release.yml`) on every push to `main`: builds a multi-stage image and publishes to `ghcr.io/hungryend/despereaux:latest` plus `:sha-<short>`. SemVer tags (`v1.2.3`) also publish `:v1.2.3`, scan the published image, and cut a GitHub Release.
+- **Publish** (the `Publish image (GHCR)` job in `.github/workflows/ci.yml`) on every push to `main`: builds a multi-stage image and publishes to `ghcr.io/hungryend/despereaux:latest` plus `:sha-<short>`. SemVer tags (`v1.2.3`) also publish `:v1.2.3`, scan the published image, and cut a GitHub Release.
 - **Dependabot** opens weekly PRs for outdated Python, npm, Docker base image, and GitHub Actions versions.
 
 All images include SBOM + build provenance attestations.
