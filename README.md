@@ -38,7 +38,9 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
   - **EPUB** — native via [epub.js]
   - **PDF** — native via [PDF.js], with byte-range streaming so huge files open instantly
   - **MOBI / AZW / AZW3** — auto-converted to EPUB at ingest using [Calibre] (bundled in the image)
-  - **CBZ / CBR** — *(roadmap)*
+  - **CBZ / CBR** — native page-image comic reader; archives are read on demand (CBR via the `unar` binary baked into the image), one page served at a time
+- **Convert to EPUB** — a per-book button turns PDF / MOBI / AZW into a clean, reflowable EPUB with an auto-linked table of contents. PDFs go through a Markdown intermediate ([PyMuPDF]-based `pdf2md`) for solid headings + inline images; scanned/image PDFs are detected and left as the original PDF — or OCR'd into a reflowable EPUB via the optional [`ocr` sidecar](#scanned-pdf-ocr-optional). Conversions run in the background as tracked jobs (status survives a restart) and surface in a header notifications menu when done.
+- **Read-aloud bridge** — EPUB and PDF readers expose a WebView JS bridge (`window.__furloughTts`) so native clients (e.g. the Furlough Android reader) can read a book aloud with sentence/word highlighting and auto page-turns.
 - **Live library indexing** — filesystem watcher catches new/changed/deleted files within seconds, plus a one-shot scan endpoint
 - **External metadata enrichment** — automatic Google Books + Open Library lookup at ingest, plus a manual picker UI with keyword search for tricky matches
 - **Multi-library support** — group your collection into named libraries (Fiction / Comics / Reference / etc.)
@@ -181,6 +183,31 @@ curl -X POST http://despereaux:8000/api/admin/sync \
 
 A sample shell script for Readarr-style "Custom Scripts" callers is included at [`scripts/notify-despereaux.sh`](scripts/notify-despereaux.sh).
 
+### Scanned-PDF OCR (optional)
+
+Born-digital PDFs and MOBI/AZW convert out of the box. **Scanned / image PDFs** (page images with no
+real text) are skipped by default — read the original PDF. To convert those too, run the optional
+**`ocr` sidecar** (Ollama + a vision model) and point despereaux at it:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DESPEREAUX_OLLAMA_HOST` | _unset_ | Ollama base URL. Empty ⇒ OCR off. Set to `http://ocr:11434` (the sidecar) or any reachable Ollama. |
+| `DESPEREAUX_OLLAMA_MODEL` | `deepseek-ocr:3b` | Vision model tag (pulled by the sidecar). Alternatives: `qwen2.5vl`, `minicpm-v`, `granite3.2-vision`. |
+| `DESPEREAUX_OLLAMA_OCR_TIMEOUT` | `600` | Per-page OCR timeout (seconds). |
+| `DESPEREAUX_OLLAMA_DPI` | `150` | Page render resolution for OCR. |
+| `DESPEREAUX_OLLAMA_NUM_CTX` | `8192` | Model context window. |
+
+```bash
+echo "DESPEREAUX_OLLAMA_HOST=http://ocr:11434" >> .env
+docker compose --profile ocr up -d        # starts despereaux + the ocr sidecar
+```
+
+The sidecar pulls the model (~6.7 GB, needs Ollama ≥ 0.13) once into the `ollama-models` volume.
+Clicking **Convert to EPUB** on a scanned PDF then runs OCR in the background — the conversions menu
+shows `OCR page N/M` and your browser is notified when it finishes. OCR is **slow on CPU** (the
+sidecar is CPU-only — minutes per book); for speed, skip the sidecar and point `DESPEREAUX_OLLAMA_HOST`
+at a GPU Ollama (NVIDIA, or AMD ROCm) with `OLLAMA_KEEP_ALIVE` set high so the model stays resident.
+
 ### File ownership
 
 | Variable | Default | Description |
@@ -199,7 +226,8 @@ The container writes everything that needs to survive restarts to `/config`. Mou
 |---|---|
 | `/config/despereaux.db` | SQLite database — books, users, reading progress, bookmarks |
 | `/config/covers/` | 600px WebP cover thumbnails |
-| `/config/converted/` | MOBI/AZW books auto-converted to EPUB (cached by content hash) |
+| `/config/converted/` | MOBI/AZW books auto-converted to EPUB at ingest (cached by content hash) |
+| `/config/exports/` | On-demand "Convert to EPUB" outputs (cached by content hash) |
 | `/config/cache/` | Future: server-side page cache for predictive prefetch |
 | `/config/metadata-cache/` | 30-day TTL cache of external metadata lookups |
 
@@ -236,10 +264,17 @@ The web UI uses the same JSON API. All endpoints require auth (either dev-mode o
 | `GET` | `/api/books/{id}/cover` | Serve the cover thumbnail |
 | `GET` | `/api/books/{id}/download` | Download the original file (audit-logged) |
 | `GET` | `/api/books/{id}/manifest` | Quick boot metadata for the reader |
+| `GET` | `/api/books/{id}/page/{n}` | Serve the nth page image (0-based) of a CBZ/CBR comic, extracted on demand |
 | `GET` / `PUT` | `/api/books/{id}/progress` | Get / save reading position for the current user |
+| `GET` | `/api/progress` | Bulk reading progress for the current user across all books |
 | `GET` | `/api/libraries` | List configured libraries with book counts |
 | `GET` | `/api/books/{id}/metadata-candidates` | List external metadata candidates for the book |
 | `POST` | `/api/books/{id}/select-metadata-match` | Apply a candidate's metadata |
+| `POST` | `/api/books/{id}/convert` | Start a background "convert to EPUB" job |
+| `GET` | `/api/books/{id}/convert/status` | Poll conversion job status / phase |
+| `GET` | `/api/books/{id}/convert/download` | Download the converted EPUB |
+| `GET` | `/api/conversions` | List the current user's conversion jobs (notifications menu) |
+| `POST` | `/api/conversions/clear` | Clear finished conversion notifications |
 | `POST` | `/api/admin/scan[?library=...]` | Trigger a library scan (admin-only) |
 | `POST` | `/api/admin/sync` | Webhook ingest (token auth) |
 
@@ -260,13 +295,13 @@ The repo's `docker-compose.yml` builds a fresh image from the local source. Fron
 ### Local development without Docker
 
 ```bash
-uv sync --extra formats           # Python deps
+uv sync --extra formats --extra pdf   # Python deps (`pdf` = PyMuPDF, AGPL — for PDF→EPUB)
 cd frontend && npm install && npm run build && cd ..   # frontend bundle
 uv run alembic upgrade head       # initialise the DB
 uv run uvicorn despereaux.main:app --reload --port 8000
 ```
 
-Requires Python 3.12+, Node 22+, and Calibre on the host PATH for MOBI/AZW conversion.
+Requires Python 3.12+, Node 22+, and Calibre on the host PATH for conversions (PDF / MOBI / AZW).
 
 ---
 
@@ -282,7 +317,6 @@ All images include SBOM + build provenance attestations.
 
 ## Roadmap
 
-- CBZ / CBR comic support
 - Direction-aware predictive page caching (instant page turns)
 - PWA support for full offline reading
 - In-book full-text search
@@ -294,8 +328,11 @@ All images include SBOM + build provenance attestations.
 
 MIT — see [LICENSE](LICENSE).
 
+The optional `pdf` extra installs **[PyMuPDF]** (AGPL-3.0, or a commercial licence from Artifex) to power the PDF → Markdown → EPUB conversion (vendored as `src/despereaux/services/pdf2md.py`). It's enabled in the Docker image by default; build without `--extra pdf` for an AGPL-free install — PDF→EPUB is then unavailable, while MOBI/AZW conversion still works. All other dependencies are permissively licensed.
+
 The mascot illustration is from [clker.com](https://www.clker.com/) (public domain clipart).
 
 [epub.js]: https://github.com/futurepress/epub.js
 [PDF.js]: https://github.com/mozilla/pdf.js
 [Calibre]: https://calibre-ebook.com/
+[PyMuPDF]: https://pymupdf.readthedocs.io/

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,8 +12,11 @@ from despereaux.config import get_settings
 from despereaux.db import get_db, session_scope
 from despereaux.middleware.auth import current_user
 from despereaux.repos import books as books_repo
+from despereaux.repos import conversions as conversions_repo
 from despereaux.repos import progress as progress_repo
 from despereaux.repos.book_delete import delete_by_id
+from despereaux.services import epub_export
+from despereaux.services.converter import calibre_available
 from despereaux.services.metadata_apply import apply_candidate
 from despereaux.services.metadata_lookup import (
     fetch_candidate_by_id,
@@ -34,6 +38,17 @@ def _asset_version() -> str:
         return str(int(bundle.stat().st_mtime))
     except OSError:
         return "0"
+
+
+def _file_token(path: str | None, fallback: str) -> str:
+    """Cache-busting token for /file. The export's mtime so the reader fetches the
+    new EPUB after a (re)conversion instead of a stale `immutable` copy."""
+    if path:
+        try:
+            return str(int(Path(path).stat().st_mtime))
+        except OSError:
+            pass
+    return fallback
 
 
 router = APIRouter(include_in_schema=False)
@@ -87,7 +102,8 @@ async def book_detail(
     parent = (
         await books_repo.get_book(session, book.parent_book_id) if book.parent_book_id else None
     )
-    return templates.TemplateResponse(
+    conversion = await conversions_repo.get_latest_for_book(session, book.id)
+    resp = templates.TemplateResponse(
         request,
         "book.html",
         {
@@ -99,8 +115,13 @@ async def book_detail(
             "duplicates": duplicates,
             "children": children,
             "parent": parent,
+            "conversion": conversion,
+            "can_convert": epub_export.can_convert(book.format),
         },
     )
+    # Conversion state changes out-of-band — keep the action buttons fresh.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/book/{book_id}/metadata", response_class=HTMLResponse)
@@ -197,6 +218,56 @@ async def detach_from(book_id: str, _user=Depends(current_user)):
     return RedirectResponse(url=f"/book/{book_id}", status_code=303)
 
 
+@router.post("/book/{book_id}/convert")
+async def convert_book(
+    book_id: str,
+    background: BackgroundTasks,
+    force: bool = False,
+    user=Depends(current_user),
+):
+    """No-JS fallback for the Convert-to-EPUB button: queue the job, then land
+    back on the detail page (which shows server-rendered status). The header
+    notifications menu drives the richer JS progress experience."""
+    conv_id: str | None = None
+    async with session_scope() as session:
+        book = await books_repo.get_book(session, book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="book not found")
+        if not epub_export.can_convert(book.format):
+            raise HTTPException(status_code=400, detail="cannot convert this format to EPUB")
+        if not calibre_available():
+            raise HTTPException(status_code=503, detail="calibre (ebook-convert) is not installed")
+        active = await conversions_repo.get_active_for_book(session, book_id)
+        if active is None:
+            conv = await conversions_repo.create(
+                session, book_id=book_id, requested_by=user["id"], source_hash=book.file_hash
+            )
+            conv_id = conv.id
+    if conv_id is not None:
+        background.add_task(epub_export.run_export, conv_id, force=force)
+    return RedirectResponse(url=f"/book/{book_id}", status_code=303)
+
+
+@router.post("/book/{book_id}/convert/delete")
+async def delete_conversion(book_id: str, _user=Depends(current_user)):
+    """Remove the converted EPUB version: delete the export file, clear the
+    primary-EPUB pointer, and drop the conversion rows. The ORIGINAL file is
+    untouched; the book reverts to reading its source format and the Convert
+    button reappears."""
+    export_path: str | None = None
+    async with session_scope() as session:
+        book = await books_repo.get_book(session, book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="book not found")
+        export_path = book.epub_export_path
+        book.epub_export_path = None
+        await conversions_repo.delete_for_book(session, book_id)
+    if export_path:
+        with contextlib.suppress(OSError):
+            Path(export_path).unlink(missing_ok=True)
+    return RedirectResponse(url=f"/book/{book_id}", status_code=303)
+
+
 @router.post("/book/{book_id}/delete")
 async def delete_book(book_id: str, _user=Depends(current_user)):
     """Remove a book from the library (DB row only — the file on disk stays).
@@ -269,21 +340,35 @@ async def _resolve_candidate(book, source: str, external_id: str, *, q: str | No
 async def read_book(
     book_id: str,
     request: Request,
+    original: bool = False,
     session: AsyncSession = Depends(get_db),
     user=Depends(current_user),
 ):
     book = await books_repo.get_book(session, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
-    # Converted books (MOBI/AZW -> EPUB) are served as EPUB to the reader JS.
-    effective_format = "epub" if book.converted_path else book.format
-    return templates.TemplateResponse(
+    # Default: read the primary EPUB (user export, else MOBI/AZW auto-conversion)
+    # if one exists. `?original=1` reads the source format (e.g. a PDF in PDF.js).
+    if original:
+        effective_format = book.format
+        file_version = book.file_hash
+    else:
+        epub = books_repo.primary_epub_path(book)
+        effective_format = "epub" if epub else book.format
+        file_version = _file_token(epub, book.file_hash)
+    resp = templates.TemplateResponse(
         request,
         "reader.html",
         {
             "user": user,
             "book": book,
             "effective_format": effective_format,
+            "original": original,
+            "file_version": file_version,
             "asset_version": _asset_version(),
         },
     )
+    # The reading state (format + file pointer) changes when a book is converted
+    # or its EPUB removed — never serve a stale reader page from cache.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

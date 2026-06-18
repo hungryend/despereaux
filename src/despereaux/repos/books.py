@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -8,6 +9,20 @@ from sqlalchemy.orm import selectinload
 
 from despereaux.models import Author, Book, BookAuthor, BookTag, Series, Tag
 from despereaux.models.base import new_id
+
+
+def primary_epub_path(book: Book) -> str | None:
+    """The EPUB the reader should serve as the book's primary form, if any.
+
+    Prefers a user-requested high-quality export (`epub_export_path`) over the
+    MOBI/AZW auto-conversion (`converted_path`). The export path is existence-
+    checked so a cleared/missing file falls back gracefully. Returns None when
+    the original format should be served (e.g. a PDF with no export yet)."""
+    if book.epub_export_path and Path(book.epub_export_path).exists():
+        return book.epub_export_path
+    if book.converted_path:
+        return book.converted_path
+    return None
 
 
 def _sort_name(name: str) -> str:

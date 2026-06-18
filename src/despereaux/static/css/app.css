@@ -11,6 +11,9 @@
 }
 
 * { box-sizing: border-box; }
+/* `hidden` must win over class display rules (e.g. the conversions icon/spinner
+   set display, which would otherwise defeat the `hidden` attribute toggle). */
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -449,3 +452,89 @@ main { padding: 1.5rem 1.25rem; max-width: 1400px; margin: 0 auto; }
 }
 .user-menu-list a:last-child { border-bottom: none; }
 .user-menu-list a:hover { background: var(--bg); color: var(--accent); }
+
+/* ---------- header conversions / notifications menu ---------- */
+@keyframes dx-spin { to { transform: rotate(360deg); } }
+@keyframes dx-indeterminate {
+  0%   { left: -40%; width: 40%; }
+  50%  { width: 55%; }
+  100% { left: 100%; width: 40%; }
+}
+
+.spinner {
+  display: inline-block; width: 13px; height: 13px; vertical-align: middle;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: dx-spin 0.8s linear infinite;
+}
+
+.conv-menu { position: relative; }
+.conv-menu summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.35rem 0.55rem; border-radius: var(--radius);
+  border: 1px solid transparent; color: var(--fg-dim);
+}
+.conv-menu summary::-webkit-details-marker { display: none; }
+.conv-menu summary:hover, .conv-menu[open] summary {
+  color: var(--accent); border-color: var(--border); background: var(--bg);
+}
+.conv-icon { display: inline-flex; align-items: center; }
+.conv-spin { width: 14px; height: 14px; }
+.conv-badge {
+  font-size: 0.7rem; font-weight: 700; min-width: 16px; text-align: center;
+  padding: 0 5px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg);
+}
+.conv-menu-list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30;
+  width: 320px; max-width: 80vw;
+  background: var(--bg-elev);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.conv-menu-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem; font-weight: 600; color: var(--fg-dim);
+}
+.conv-items { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+.conv-empty { padding: 0.9rem; color: var(--fg-dim); font-size: 0.85rem; text-align: center; }
+.conv-item {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border);
+}
+.conv-item:last-child { border-bottom: none; }
+.conv-item > a { font-size: 0.9rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-item > a:hover { color: var(--accent); }
+.conv-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--fg-dim); flex-wrap: wrap; }
+.conv-phase { color: var(--fg-dim); }
+.conv-done { color: #7bc98c; font-weight: 600; }
+.conv-fail { color: #e57373; font-weight: 600; }
+.conv-dl { color: var(--accent); font-weight: 600; }
+.conv-meta { color: var(--fg-dim); font-size: 0.76rem; }
+.conv-bar {
+  position: relative; display: block; height: 3px; margin-top: 4px;
+  background: var(--border); border-radius: 999px; overflow: hidden;
+}
+.conv-bar > span {
+  position: absolute; top: 0; bottom: 0; left: -40%; width: 40%;
+  background: var(--accent); border-radius: 999px;
+  animation: dx-indeterminate 1.2s ease-in-out infinite;
+}
+
+/* convert state on the book detail page */
+.convert-status { display: flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; color: var(--fg-dim); }
+.convert-meta { font-size: 0.8rem; color: var(--fg-dim); }
+.convert-error {
+  font-size: 0.82rem; color: #f1b3b8;
+  padding: 0.4rem 0.6rem; border: 1px solid #b3424a; border-radius: var(--radius);
+  background: rgba(179, 66, 74, 0.12);
+}
+
+/* "EPUB available" badge on library cards */
+.card-badge {
+  position: absolute; top: 6px; left: 6px;
+  padding: 1px 6px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+  background: var(--accent); color: var(--accent-fg); border-radius: 999px;
+}

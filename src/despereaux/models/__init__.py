@@ -9,6 +9,7 @@ from despereaux.models.book import (
     Series,
     Tag,
 )
+from despereaux.models.conversion import Conversion, ConversionStatus
 from despereaux.models.download import Download
 from despereaux.models.progress import Bookmark, ReadingProgress
 from despereaux.models.user import User
@@ -21,6 +22,8 @@ __all__ = [
     "BookAuthor",
     "BookTag",
     "Bookmark",
+    "Conversion",
+    "ConversionStatus",
     "Download",
     "MetadataSource",
     "ReadingProgress",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,6 +58,26 @@ class Settings(BaseSettings):
     google_books_api_key: str | None = None
     log_level: str = "INFO"
 
+    # === Optional OCR for scanned/image PDFs (Ollama vision model) ===
+    # Unset/empty ⇒ OCR disabled (scanned PDFs are skipped, "read the original").
+    # Set to the bundled sidecar (http://ocr:11434) or any reachable Ollama (incl.
+    # a GPU box) to OCR scans into reflowable EPUBs. See `ocr` profile in compose.
+    ollama_host: str | None = None
+    ollama_model: str = "deepseek-ocr:3b"
+    ollama_ocr_timeout: int = 600  # per page (seconds)
+    ollama_dpi: int = 150  # page render resolution for OCR
+    ollama_num_ctx: int = 8192
+
+    @field_validator("ollama_host", mode="before")
+    @classmethod
+    def _blank_host_to_none(cls, v: object) -> str | None:
+        # Treat "" / whitespace the same as unset so `ocr_available()` is a simple
+        # truthiness check (env vars are often set to an empty string).
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
     @model_validator(mode="after")
     def _resolve_libraries(self) -> Settings:
         if not self.libraries:
@@ -87,6 +107,13 @@ class Settings(BaseSettings):
         """Where MOBI/AZW (etc.) converted EPUBs live, keyed by content hash."""
         return self.data_dir / "converted"
 
+    @property
+    def exports_dir(self) -> Path:
+        """Where user-requested high-quality EPUB exports live, keyed by content
+        hash. Kept separate from `converted_dir` (the MOBI/AZW reader cache) so
+        the two never collide."""
+        return self.data_dir / "exports"
+
 
 _settings: Settings | None = None
 
@@ -101,6 +128,12 @@ def get_settings() -> Settings:
             _settings.cache_dir,
             _settings.metadata_cache_dir,
             _settings.converted_dir,
+            _settings.exports_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
     return _settings
+
+
+def ocr_available() -> bool:
+    """True when an Ollama host is configured — enables scanned-PDF OCR."""
+    return bool((get_settings().ollama_host or "").strip())

@@ -9,8 +9,48 @@
       <div class="no-cover-large"><span>{{ book.title[:1]|upper }}</span></div>
     {% endif %}
     <div class="actions">
-      <a class="btn btn-primary" href="/read/{{ book.id }}">Read</a>
-      <a class="btn" href="/api/books/{{ book.id }}/download">Download original</a>
+      {% set st = conversion.status.value if conversion else None %}
+      {% if book.epub_export_path %}
+        <a class="btn btn-primary" href="/read/{{ book.id }}">Read (EPUB)</a>
+        {% if book.format == 'pdf' %}
+          <a class="btn" href="/read/{{ book.id }}?original=1">Read original (PDF)</a>
+        {% endif %}
+        <a class="btn" href="/api/books/{{ book.id }}/convert/download">Download EPUB</a>
+        <a class="btn" href="/api/books/{{ book.id }}/download">Download original</a>
+      {% else %}
+        <a class="btn btn-primary" href="/read/{{ book.id }}">Read</a>
+        <a class="btn" href="/api/books/{{ book.id }}/download">Download original</a>
+      {% endif %}
+
+      {% if can_convert %}
+        {% if st in ['queued', 'running'] %}
+          <div class="convert-status" data-book-id="{{ book.id }}" data-active="1">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="convert-label">{{ conversion.phase or 'Converting…' }}</span>
+          </div>
+        {% elif book.epub_export_path %}
+          {% if conversion and conversion.toc_count is not none %}
+            <div class="convert-meta">TOC: {{ conversion.toc_count }} entries{% if conversion.toc_source %} ({{ conversion.toc_source }}){% endif %}{% if conversion.image_count is not none %} · Images: {{ conversion.image_count }}{% endif %}</div>
+          {% endif %}
+          <form method="post" action="/book/{{ book.id }}/convert?force=1" class="inline-form"
+                onsubmit="if(window.Notification&amp;&amp;Notification.permission==='default')Notification.requestPermission();return confirm('Re-build the EPUB from scratch? This replaces the current converted version.');">
+            <button type="submit" class="btn btn-ghost btn-small">Re-convert</button>
+          </form>
+          <form method="post" action="/book/{{ book.id }}/convert/delete" class="inline-form"
+                onsubmit="return confirm('Remove the converted EPUB version? The original file is untouched and you can convert again later.');">
+            <button type="submit" class="btn btn-danger btn-small">Remove EPUB version</button>
+          </form>
+        {% else %}
+          {% if st == 'failed' and conversion %}
+            <div class="convert-error">Conversion failed: {{ conversion.error or 'unknown error' }}</div>
+          {% endif %}
+          <form method="post" action="/book/{{ book.id }}/convert" class="inline-form"
+                onsubmit="if(window.Notification&amp;&amp;Notification.permission==='default')Notification.requestPermission();return confirm('Build a high-quality EPUB with a linked table of contents? It runs in the background — large or scanned PDFs can take a while, and you\'ll be notified when it\'s done.');">
+            <button type="submit" class="btn btn-primary">{% if st == 'failed' %}Try again{% else %}Convert to EPUB{% endif %}</button>
+          </form>
+        {% endif %}
+      {% endif %}
+
       <a class="btn" href="/book/{{ book.id }}/metadata">Edit metadata</a>
       {% if not parent %}
         <a class="btn" href="/book/{{ book.id }}/attach">Attach as asset of…</a>
@@ -104,4 +144,28 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+{% if conversion and conversion.status.value in ['queued', 'running'] %}
+<script>
+  (function () {
+    var bookId = {{ book.id|tojson }};
+    var label = document.querySelector('.convert-status .convert-label');
+    var timer = setInterval(function () {
+      fetch('/api/books/' + bookId + '/convert/status', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (s) {
+          if (!s) return;
+          if (s.status === 'done' || s.status === 'failed') {
+            clearInterval(timer);
+            window.location.reload();
+          } else if (label && s.phase) {
+            label.textContent = s.phase;
+          }
+        })
+        .catch(function () {});
+    }, 3000);
+  })();
+</script>
+{% endif %}
 {% endblock %}

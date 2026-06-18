@@ -54,6 +54,13 @@ services:
 
       - DESPEREAUX_LOG_LEVEL=INFO
 
+      # === Optional OCR for scanned/image PDFs (the `ocr` sidecar below) ===
+      # Empty = OCR off (scanned PDFs are skipped). Set to http://ocr:11434 and
+      # run with `--profile ocr` to OCR scans into reflowable EPUBs — or point at
+      # any reachable Ollama (e.g. a GPU box) instead of running the sidecar.
+      - DESPEREAUX_OLLAMA_HOST=${DESPEREAUX_OLLAMA_HOST:-}
+      - DESPEREAUX_OLLAMA_MODEL=${DESPEREAUX_OLLAMA_MODEL:-deepseek-ocr:3b}
+
     volumes:
       # ====================================================================
       # 1) EBOOK LIBRARY — where your .epub / .pdf / .cbz / .mobi files live.
@@ -92,3 +99,30 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # ======================================================================
+  # OPTIONAL OCR sidecar — only starts with `--profile ocr` (or
+  # COMPOSE_PROFILES=ocr). Runs Ollama + a vision model so scanned/image PDFs
+  # can be OCR'd into reflowable EPUBs. To enable: set
+  # DESPEREAUX_OLLAMA_HOST=http://ocr:11434 (above) and bring the stack up with
+  # the `ocr` profile. The model (~6.7 GB) is pulled once into `ollama-models`.
+  # CPU-only here (slow — minutes per book); for speed, skip this and point
+  # DESPEREAUX_OLLAMA_HOST at a GPU Ollama (NVIDIA, or AMD ROCm) instead.
+  # ======================================================================
+  ocr:
+    image: ollama/ollama
+    container_name: despereaux-ocr
+    profiles: ["ocr"]
+    restart: unless-stopped
+    environment:
+      - OLLAMA_KEEP_ALIVE=2h        # keep the model resident across a long book
+      - OCR_MODEL=${DESPEREAUX_OLLAMA_MODEL:-deepseek-ocr:3b}
+    # Pull the model on first start (cached in the volume), then serve.
+    # `$$OCR_MODEL` escapes Compose interpolation so the container shell expands it.
+    entrypoint: ["/bin/sh", "-c"]
+    command: 'ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull "$$OCR_MODEL"; wait'
+    volumes:
+      - ollama-models:/root/.ollama
+
+volumes:
+  ollama-models:

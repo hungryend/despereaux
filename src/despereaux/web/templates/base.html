@@ -31,6 +31,24 @@
         <input type="search" name="search" value="{{ search|default('', true) }}" placeholder="Search title or author" />
       </form>
       {% if user %}
+      <details class="conv-menu" id="conv-menu" hidden>
+        <summary class="conv-summary" aria-label="Conversions" title="Conversions">
+          <span class="conv-spin spinner" aria-hidden="true" hidden></span>
+          <svg class="conv-icon" width="16" height="16" viewBox="0 0 16 16" fill="none"
+               stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3.4C6.4 2.6 4.6 2.6 2.8 3.2v9.2c1.8-.6 3.6-.6 5.2.2 1.6-.8 3.4-.8 5.2-.2V3.2C11.4 2.6 9.6 2.6 8 3.4z"/>
+            <path d="M8 3.6v8.8"/>
+          </svg>
+          <span class="conv-badge" hidden>0</span>
+        </summary>
+        <nav class="conv-menu-list">
+          <div class="conv-menu-head">
+            <span>Conversions</span>
+            <button type="button" class="btn-link conv-clear" hidden>Clear</button>
+          </div>
+          <ul class="conv-items"><li class="conv-empty">No conversions yet.</li></ul>
+        </nav>
+      </details>
       <details class="user-menu">
         <summary class="user-name">{{ user.username }}</summary>
         <nav class="user-menu-list">
@@ -45,5 +63,113 @@
       {% block content %}{% endblock %}
     </main>
     {% block scripts %}{% endblock %}
+    {% if user %}
+    <script>
+      (function () {
+        var menu = document.getElementById('conv-menu');
+        if (!menu) return;
+        var badge = menu.querySelector('.conv-badge');
+        var list = menu.querySelector('.conv-items');
+        var clearBtn = menu.querySelector('.conv-clear');
+        var icon = menu.querySelector('.conv-icon');
+        var spin = menu.querySelector('.conv-spin');
+        var timer = null;
+
+        function esc(s) {
+          var d = document.createElement('div');
+          d.textContent = s == null ? '' : String(s);
+          return d.innerHTML;
+        }
+
+        function itemHtml(i) {
+          var title = esc(i.title || 'Book');
+          var href = '/book/' + encodeURIComponent(i.book_id);
+          if (i.status === 'queued' || i.status === 'running') {
+            return '<li class="conv-item"><a href="' + href + '">' + title + '</a>' +
+              '<span class="conv-row"><span class="spinner" aria-hidden="true"></span>' +
+              '<span class="conv-phase">' + esc(i.phase || 'Converting…') + '</span></span>' +
+              '<span class="conv-bar"><span></span></span></li>';
+          }
+          if (i.status === 'done') {
+            var meta = (i.toc_count != null ? 'TOC ' + i.toc_count : '') +
+              (i.image_count != null ? ' · img ' + i.image_count : '') +
+              (i.engine ? ' · ' + i.engine : '');
+            return '<li class="conv-item"><a href="' + href + '">' + title + '</a>' +
+              '<span class="conv-row"><span class="conv-done">done</span> ' +
+              '<a class="conv-dl" href="/api/books/' + encodeURIComponent(i.book_id) +
+              '/convert/download">EPUB</a>' +
+              (meta ? '<span class="conv-meta">' + esc(meta) + '</span>' : '') + '</span></li>';
+          }
+          return '<li class="conv-item"><a href="' + href + '">' + title + '</a>' +
+            '<span class="conv-row"><span class="conv-fail">failed</span> ' +
+            '<span class="conv-meta">' + esc(i.error || '') + '</span></span></li>';
+        }
+
+        var prevActive = {};
+        function notifyDone(i) {
+          if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+          var ok = i.status === 'done';
+          try {
+            new Notification(ok ? 'EPUB ready' : 'Conversion failed', {
+              body: (i.title || 'Book') + (ok ? '' : ' — ' + (i.error || '')),
+            });
+          } catch (e) { /* best-effort */ }
+        }
+
+        function render(data) {
+          var items = (data && data.conversions) || [];
+          // Hide the whole chip when there's nothing to show — no idle clutter.
+          menu.hidden = items.length === 0;
+          if (!items.length) { badge.hidden = true; prevActive = {}; return; }
+          // Notify when a job we saw active has finished (best-effort, needs permission).
+          var nowActive = {};
+          items.forEach(function (i) {
+            if (i.status === 'queued' || i.status === 'running') nowActive[i.conversion_id] = true;
+            else if (prevActive[i.conversion_id]) notifyDone(i);
+          });
+          prevActive = nowActive;
+          var active = !!(data && data.active);
+          var activeCount = items.filter(function (i) {
+            return i.status === 'queued' || i.status === 'running';
+          }).length;
+          if (activeCount > 0) { badge.textContent = String(activeCount); badge.hidden = false; }
+          else { badge.hidden = true; }
+          if (spin) spin.hidden = !active;  // spinner while converting...
+          icon.hidden = active;             // ...replaces the static book icon
+          clearBtn.hidden = false;
+          list.innerHTML = items.map(itemHtml).join('');
+        }
+
+        function schedule(ms) { clearTimeout(timer); timer = setTimeout(poll, ms); }
+
+        function poll() {
+          if (document.hidden) { schedule(10000); return; }
+          fetch('/api/conversions', { headers: { Accept: 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+              if (data) render(data);
+              schedule(data && data.active ? 3000 : 15000);
+            })
+            .catch(function () { schedule(20000); });
+        }
+
+        clearBtn.addEventListener('click', function () {
+          fetch('/api/conversions/clear', { method: 'POST' }).then(poll).catch(poll);
+        });
+
+        // Opening the menu is a user gesture — a good moment to ask for notify permission.
+        var summary = menu.querySelector('summary');
+        if (summary) {
+          summary.addEventListener('click', function () {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+              Notification.requestPermission();
+            }
+          });
+        }
+
+        poll();
+      })();
+    </script>
+    {% endif %}
   </body>
 </html>
