@@ -61,6 +61,13 @@ services:
       - DESPEREAUX_OLLAMA_HOST=${DESPEREAUX_OLLAMA_HOST:-}
       - DESPEREAUX_OLLAMA_MODEL=${DESPEREAUX_OLLAMA_MODEL:-deepseek-ocr:3b}
 
+      # === Optional tomeforge conversion sidecar (the `tomeforge` service below) ===
+      # Empty = PDF→EPUB runs in-process (needs the PyMuPDF `pdf` extra in the image).
+      # Set to http://tomeforge:8400 and run with `--profile tomeforge` to offload
+      # PDF→Markdown→EPUB to the sidecar instead — letting you build despereaux
+      # WITHOUT the AGPL PyMuPDF dep. MOBI/AZW still convert locally via Calibre.
+      - DESPEREAUX_TOMEFORGE_HOST=${DESPEREAUX_TOMEFORGE_HOST:-}
+
     volumes:
       # ====================================================================
       # 1) EBOOK LIBRARY — where your .epub / .pdf / .cbz / .mobi files live.
@@ -123,6 +130,22 @@ services:
     command: 'ollama serve & until ollama list >/dev/null 2>&1; do sleep 1; done; ollama pull "$$OCR_MODEL"; wait'
     volumes:
       - ollama-models:/root/.ollama
+
+  # ======================================================================
+  # OPTIONAL tomeforge conversion sidecar — only starts with
+  # `--profile tomeforge`. Offloads PDF→Markdown→EPUB (PyMuPDF + Calibre) so the
+  # despereaux image can drop the AGPL `pdf` extra. To enable: set
+  # DESPEREAUX_TOMEFORGE_HOST=http://tomeforge:8400 (above) and bring the stack up
+  # with the `tomeforge` profile. Built from the sibling repo at ../tomeforge.
+  # For scanned-PDF OCR, also run `--profile ocr`: despereaux forwards its
+  # DESPEREAUX_OLLAMA_* config and the sidecar reaches the `ocr` service itself.
+  # ======================================================================
+  tomeforge:
+    image: tomeforge:latest
+    build: ../tomeforge
+    container_name: despereaux-tomeforge
+    profiles: ["tomeforge"]
+    restart: unless-stopped
 
 volumes:
   ollama-models:

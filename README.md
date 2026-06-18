@@ -208,6 +208,29 @@ shows `OCR page N/M` and your browser is notified when it finishes. OCR is **slo
 sidecar is CPU-only — minutes per book); for speed, skip the sidecar and point `DESPEREAUX_OLLAMA_HOST`
 at a GPU Ollama (NVIDIA, or AMD ROCm) with `OLLAMA_KEEP_ALIVE` set high so the model stays resident.
 
+### tomeforge conversion sidecar (optional)
+
+PDF→EPUB normally runs **in-process** and needs the AGPL `pdf` extra (PyMuPDF) baked into the image.
+Alternatively, offload it to a [tomeforge](https://github.com/hungryend/tomeforge) **conversion
+sidecar** — then despereaux can be built **without** the `pdf` extra (MIT-only core) and still convert
+PDFs. The sidecar does PDF → Markdown → EPUB (and scanned-PDF OCR, reaching the same Ollama); despereaux
+still applies its own linked-TOC guarantee and scanned backstop to the result.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DESPEREAUX_TOMEFORGE_HOST` | _unset_ | tomeforge service base URL. Empty ⇒ PDF→EPUB runs in-process. Set to `http://tomeforge:8400` (the sidecar) or any reachable tomeforge. |
+| `DESPEREAUX_TOMEFORGE_TIMEOUT` | `1800` | Overall per-conversion ceiling (seconds). |
+
+```bash
+echo "DESPEREAUX_TOMEFORGE_HOST=http://tomeforge:8400" >> .env
+docker compose --profile tomeforge up -d            # despereaux + the tomeforge sidecar
+docker compose --profile tomeforge --profile ocr up -d   # …also OCR scanned PDFs
+```
+
+Resolution order for the PDF path: **sidecar** (if `DESPEREAUX_TOMEFORGE_HOST` is set) → **in-process**
+pdf2md (if the `pdf` extra is installed) → otherwise the Convert button reports that neither is
+available. MOBI/AZW always convert locally via Calibre, sidecar or not.
+
 ### File ownership
 
 | Variable | Default | Description |

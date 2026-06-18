@@ -68,11 +68,21 @@ class Settings(BaseSettings):
     ollama_dpi: int = 150  # page render resolution for OCR
     ollama_num_ctx: int = 8192
 
-    @field_validator("ollama_host", mode="before")
+    # === Optional tomeforge conversion sidecar ===
+    # Unset/empty ⇒ PDF→EPUB runs in-process (needs the PyMuPDF `pdf` extra). Set to
+    # a reachable tomeforge service (http://tomeforge:8400) to offload PDF→Markdown→
+    # EPUB there instead — so this image can ship WITHOUT the AGPL PyMuPDF dep and
+    # still convert PDFs. MOBI/AZW always convert locally via Calibre. The sidecar
+    # reaches Ollama itself for scans, using the DESPEREAUX_OLLAMA_* settings below.
+    # See the `tomeforge` profile in compose.
+    tomeforge_host: str | None = None
+    tomeforge_timeout: int = 1800  # overall per-conversion ceiling (seconds)
+
+    @field_validator("ollama_host", "tomeforge_host", mode="before")
     @classmethod
     def _blank_host_to_none(cls, v: object) -> str | None:
-        # Treat "" / whitespace the same as unset so `ocr_available()` is a simple
-        # truthiness check (env vars are often set to an empty string).
+        # Treat "" / whitespace the same as unset so the `*_available()` helpers are
+        # simple truthiness checks (env vars are often set to an empty string).
         if v is None:
             return None
         s = str(v).strip()
@@ -137,3 +147,8 @@ def get_settings() -> Settings:
 def ocr_available() -> bool:
     """True when an Ollama host is configured — enables scanned-PDF OCR."""
     return bool((get_settings().ollama_host or "").strip())
+
+
+def tomeforge_available() -> bool:
+    """True when a tomeforge conversion sidecar is configured — offloads PDF→EPUB."""
+    return bool((get_settings().tomeforge_host or "").strip())

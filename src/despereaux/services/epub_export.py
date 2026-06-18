@@ -34,11 +34,12 @@ import lxml.html
 from ebooklib import epub
 from fastapi.concurrency import run_in_threadpool
 
-from despereaux.config import get_settings, ocr_available
+from despereaux.config import get_settings, ocr_available, tomeforge_available
 from despereaux.db import session_scope
 from despereaux.models import ConversionStatus
 from despereaux.repos import books as books_repo
 from despereaux.repos import conversions as conversions_repo
+from despereaux.services import tomeforge_client
 from despereaux.services.converter import calibre_available, convert_to_epub
 
 log = logging.getLogger(__name__)
@@ -93,8 +94,8 @@ _SCANNED_MSG = (
 )
 
 _NO_PDFMD_MSG = (
-    "PDF→EPUB needs the PyMuPDF 'pdf' extra — rebuild the image with `--extra pdf`. "
-    "(MOBI/AZW conversion is unaffected.)"
+    "PDF→EPUB needs either the PyMuPDF 'pdf' extra (rebuild with `--extra pdf`) or a "
+    "tomeforge sidecar (set DESPEREAUX_TOMEFORGE_HOST). (MOBI/AZW conversion is unaffected.)"
 )
 
 _OCR_UNREACHABLE_MSG = (
@@ -249,6 +250,44 @@ async def _patch(conversion_id: str, **fields) -> None:
         await conversions_repo.set_status(session, conversion_id, **fields)
 
 
+async def _convert_pdf_via_sidecar(
+    conversion_id: str, src: Path, out: Path
+) -> tomeforge_client.SidecarResult | None:
+    """Offload PDF→Markdown→EPUB to the tomeforge sidecar, forwarding its phase
+    (incl. ``OCR page N/M``) onto the conversion row. Returns the sidecar result, or
+    None after recording a failed status. The sidecar reaches Ollama itself for
+    scans, using despereaux's DESPEREAUX_OLLAMA_* settings passed per request."""
+    settings = get_settings()
+
+    async def on_phase(phase: str) -> None:
+        await _patch(conversion_id, phase=phase)
+
+    await _patch(conversion_id, phase="Converting…")
+    try:
+        # One conversion at a time: a single Ollama behind the sidecar would thrash
+        # under parallel OCR (matches the in-process OCR guarantee).
+        async with _OCR_SEMAPHORE:
+            result = await tomeforge_client.convert_pdf(
+                settings.tomeforge_host or "",
+                src,
+                out,
+                overall_timeout=settings.tomeforge_timeout,
+                ocr="auto",
+                ollama_host=settings.ollama_host,
+                model=settings.ollama_model,
+                dpi=settings.ollama_dpi,
+                ocr_timeout=settings.ollama_ocr_timeout,
+                num_ctx=settings.ollama_num_ctx,
+                on_phase=on_phase,
+            )
+    except tomeforge_client.SidecarError as e:
+        await _patch(conversion_id, status=ConversionStatus.failed, error=str(e)[:2000], phase=None)
+        return None
+    if result.engine in ("ocr", "heuristic"):
+        await _patch(conversion_id, engine=result.engine)
+    return result
+
+
 async def run_export(conversion_id: str, *, force: bool = False) -> None:
     """Execute one conversion job, recording progress + result on its row.
 
@@ -304,7 +343,17 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
         # OCR via the Ollama sidecar when configured, else skip. MOBI/AZW: Calibre.
         use_ocr = False
         ocr_work: Path | None = None
-        if fmt == "pdf":
+        if fmt == "pdf" and tomeforge_available():
+            # Offload to the tomeforge sidecar (no local PyMuPDF needed). It returns
+            # a plain EPUB; despereaux still runs its TOC guarantee + scanned backstop
+            # below. `use_ocr` tracks the sidecar's engine so the backstop doesn't
+            # re-skip a genuinely OCR'd book.
+            sresult = await _convert_pdf_via_sidecar(conversion_id, src, out)
+            if sresult is None:
+                return
+            use_ocr = sresult.engine == "ocr"
+            result = out
+        elif fmt == "pdf":
             if not _pdfmd_available():
                 await _patch(conversion_id, status=ConversionStatus.failed,
                              error=_NO_PDFMD_MSG, phase=None)
