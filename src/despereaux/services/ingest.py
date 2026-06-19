@@ -11,6 +11,7 @@ and cover handling stay consistent.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 from dataclasses import dataclass, field
@@ -276,6 +277,17 @@ async def _finalise_ingest(
         )
         book_id = book.id
         was_created = book.cover_path is None
+
+        # A re-ingest only reaches here when content changed (the unchanged-hash
+        # fast path returns earlier). That invalidates any prior EPUB export,
+        # which is keyed by the OLD file_hash — drop the pointer and the file so
+        # we never serve a stale export for new content. (upsert_book leaves
+        # epub_export_path untouched, so it still holds the old value here.)
+        if book.epub_export_path:
+            stale_export = Path(book.epub_export_path)
+            book.epub_export_path = None
+            with contextlib.suppress(OSError):
+                stale_export.unlink(missing_ok=True)
 
     if meta.cover_bytes:
         cover_path = write_cover(book_id, meta.cover_bytes)

@@ -21,6 +21,10 @@ os.environ.setdefault(
 os.environ.setdefault("DESPEREAUX_DEV_MODE", "true")
 os.environ.setdefault("DESPEREAUX_LOG_LEVEL", "WARNING")
 os.environ.setdefault("DESPEREAUX_WEBHOOK_TOKEN", "test-token-aaaaaaaaaaaaaaaaaaaaa")
+# Convert-to-EPUB is gated on a tomeforge sidecar being configured. Point at a
+# dummy host so the feature is "available" in tests; the actual sidecar call is
+# always stubbed (run_export / tomeforge_client.convert_pdf are monkeypatched).
+os.environ.setdefault("DESPEREAUX_TOMEFORGE_HOST", "http://tomeforge-test:8400")
 
 
 @pytest.fixture(scope="session", autouse=True)

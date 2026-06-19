@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from despereaux.api import admin as admin_api
 from despereaux.api import books as books_api
+from despereaux.api import export as export_api
 from despereaux.api import libraries as libraries_api
 from despereaux.api import metadata as metadata_api
 from despereaux.api import progress as progress_api
@@ -79,6 +80,19 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(_run_migrations)
     await apply_sqlite_pragmas()
 
+    # Fail any conversions left in-flight by a previous restart — their
+    # background tasks didn't survive, so they'd otherwise spin forever.
+    try:
+        from despereaux.db import session_scope
+        from despereaux.repos import conversions as conversions_repo
+
+        async with session_scope() as session:
+            orphaned = await conversions_repo.fail_orphaned(session)
+        if orphaned:
+            log.info("marked %d orphaned conversion(s) as failed on startup", orphaned)
+    except Exception as e:
+        log.warning("orphaned-conversion reconcile skipped: %s", e)
+
     # Kick off a one-shot scan in the background; don't block startup.
     # Skip the scan only if NO configured library exists on disk.
     library_paths_exist = any(lib.path.exists() for lib in settings.libraries)
@@ -126,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(stream_api.router)
     app.include_router(admin_api.router)
     app.include_router(tokens_api.router)
+    app.include_router(export_api.router)
     app.include_router(web_routes.router)
     app.include_router(web_auth_routes.router)
 

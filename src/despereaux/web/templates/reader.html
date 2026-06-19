@@ -13,7 +13,7 @@
         title: {{ book.title|tojson }},
         format: {{ effective_format|tojson }},
         originalFormat: {{ book.format|tojson }},
-        fileUrl: "/api/books/{{ book.id }}/file",
+        fileUrl: "/api/books/{{ book.id }}/file?v={{ file_version }}{% if original %}&original=1{% endif %}",
         manifestUrl: "/api/books/{{ book.id }}/manifest",
         progressUrl: "/api/books/{{ book.id }}/progress"
       };

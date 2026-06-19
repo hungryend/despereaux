@@ -41,6 +41,7 @@ def _build_etag(book_hash: str) -> str:
 async def serve_file(
     book_id: str,
     request: Request,
+    original: bool = False,
     session: AsyncSession = Depends(get_db),
     _user=Depends(current_user),
 ):
@@ -48,10 +49,13 @@ async def serve_file(
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
 
-    # If the source format needed conversion (MOBI/AZW -> EPUB), serve the
-    # converted file to the reader. Download still serves the original below.
-    if book.converted_path:
-        path = Path(book.converted_path)
+    # By default serve the primary EPUB if one exists — a user-requested export
+    # (preferred) or the MOBI/AZW auto-conversion — so the reader gets reflowable
+    # EPUB. `?original=1` forces the source file, e.g. to read a PDF in PDF.js
+    # even after an EPUB export exists. Download still serves the original below.
+    epub_path = None if original else books_repo.primary_epub_path(book)
+    if epub_path:
+        path = Path(epub_path)
         served_format = "epub"
     else:
         path = Path(book.file_path)
@@ -60,7 +64,7 @@ async def serve_file(
     if not path.exists():
         raise HTTPException(status_code=410, detail="file missing on disk")
 
-    etag = _build_etag(book.file_hash + (":epub" if book.converted_path else ""))
+    etag = _build_etag(book.file_hash + (":epub" if served_format == "epub" else ""))
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
 
@@ -149,14 +153,19 @@ async def book_manifest(
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
 
+    epub_path = books_repo.primary_epub_path(book)
     return {
         "id": book.id,
         "title": book.title,
         "format": book.format,
-        # `served_format` is what /file actually returns — 'epub' for converted
-        # MOBI/AZW, original format otherwise. The reader uses this to pick its
-        # rendering engine.
-        "served_format": "epub" if book.converted_path else book.format,
+        # `served_format` is what /file returns by default — 'epub' when a
+        # converted/exported EPUB exists, the original format otherwise. The
+        # reader uses this to pick its rendering engine.
+        "served_format": "epub" if epub_path else book.format,
+        # The true source format + whether a user EPUB export exists, so the UI
+        # can offer "read original" alongside "read as EPUB".
+        "original_format": book.format,
+        "has_epub_export": bool(book.epub_export_path and Path(book.epub_export_path).exists()),
         "page_count": book.page_count,
         "file_hash": book.file_hash,
     }
