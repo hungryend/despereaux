@@ -50,15 +50,21 @@ async def test_convert_pdf_happy_path(tmp_path, monkeypatch):
     out = tmp_path / "out.epub"
 
     phases: list[str] = []
-    transport = _mock_sidecar(statuses=[
-        {"status": "running", "phase": "OCR page 1/3"},
-        {"status": "running", "phase": "OCR page 3/3"},
-        {"status": "done", "engine": "ocr", "scanned": True},
-    ])
+    transport = _mock_sidecar(
+        statuses=[
+            {"status": "running", "phase": "OCR page 1/3"},
+            {"status": "running", "phase": "OCR page 3/3"},
+            {"status": "done", "engine": "ocr", "scanned": True},
+        ]
+    )
 
     result = await tomeforge_client.convert_pdf(
-        "http://tomeforge:8400", src, out,
-        overall_timeout=60, on_phase=lambda p: _record(phases, p), transport=transport,
+        "http://tomeforge:8400",
+        src,
+        out,
+        overall_timeout=60,
+        on_phase=lambda p: _record(phases, p),
+        transport=transport,
     )
 
     assert out.read_bytes().startswith(b"PK")
@@ -74,8 +80,11 @@ async def test_convert_pdf_failed_job_raises(tmp_path, monkeypatch):
 
     with pytest.raises(tomeforge_client.SidecarError, match="out of memory"):
         await tomeforge_client.convert_pdf(
-            "http://tomeforge:8400", src, tmp_path / "out.epub",
-            overall_timeout=60, transport=transport,
+            "http://tomeforge:8400",
+            src,
+            tmp_path / "out.epub",
+            overall_timeout=60,
+            transport=transport,
         )
     assert not (tmp_path / "out.epub").exists()
 
@@ -86,8 +95,11 @@ async def test_convert_pdf_unreachable_raises(tmp_path):
 
     with pytest.raises(tomeforge_client.SidecarError, match="not reachable"):
         await tomeforge_client.convert_pdf(
-            "http://tomeforge:8400", _pdf(tmp_path), tmp_path / "o.epub",
-            overall_timeout=60, transport=httpx.MockTransport(boom),
+            "http://tomeforge:8400",
+            _pdf(tmp_path),
+            tmp_path / "o.epub",
+            overall_timeout=60,
+            transport=httpx.MockTransport(boom),
         )
 
 
@@ -125,8 +137,14 @@ async def test_run_export_uses_sidecar_when_configured(tmp_path, monkeypatch):
 
     async with session_scope() as s:
         book = Book(
-            id=new_id(), title="T", sort_title="t", format="pdf", library="Default",
-            file_path=str(src), file_size=10, file_mtime=datetime.now(UTC),
+            id=new_id(),
+            title="T",
+            sort_title="t",
+            format="pdf",
+            library="Default",
+            file_path=str(src),
+            file_size=10,
+            file_mtime=datetime.now(UTC),
             file_hash=new_id().replace("-", ""),
         )
         s.add(book)

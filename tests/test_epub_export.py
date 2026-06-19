@@ -131,10 +131,10 @@ def test_extract_text_len(tmp_path):
 
 
 def test_looks_like_scanned_pdf():
-    assert epub_export._looks_like_scanned_pdf("pdf", 0, 66) is True   # image dump
+    assert epub_export._looks_like_scanned_pdf("pdf", 0, 66) is True  # image dump
     assert epub_export._looks_like_scanned_pdf("pdf", 5000, 10) is False  # real text
-    assert epub_export._looks_like_scanned_pdf("mobi", 0, 5) is False     # only guard PDFs
-    assert epub_export._looks_like_scanned_pdf("pdf", 100, 0) is False    # no images
+    assert epub_export._looks_like_scanned_pdf("mobi", 0, 5) is False  # only guard PDFs
+    assert epub_export._looks_like_scanned_pdf("pdf", 100, 0) is False  # no images
 
 
 def test_can_convert_gate(monkeypatch):

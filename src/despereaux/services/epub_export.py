@@ -51,12 +51,17 @@ _EXPORT_TIMEOUT = 900
 # namespace). No image-suppressing flags — embedded figures stay inline.
 _COMMON_TOC_FLAGS = [
     "--enable-heuristics",
-    "--toc-threshold", "6",
-    "--max-toc-links", "50",
+    "--toc-threshold",
+    "6",
+    "--max-toc-links",
+    "50",
     "--duplicate-links-in-toc",
-    "--level1-toc", "//h:h1",
-    "--level2-toc", "//h:h2",
-    "--level3-toc", "//h:h3",
+    "--level1-toc",
+    "//h:h1",
+    "--level2-toc",
+    "//h:h2",
+    "--level3-toc",
+    "//h:h3",
 ]
 _MOBI_FLAGS = list(_COMMON_TOC_FLAGS)
 
@@ -155,24 +160,39 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
         book = await books_repo.get_book(session, conv.book_id)
         if book is None:
             await conversions_repo.set_status(
-                session, conversion_id, status=ConversionStatus.failed,
-                error="book not found", phase=None,
+                session,
+                conversion_id,
+                status=ConversionStatus.failed,
+                error="book not found",
+                phase=None,
             )
             return
         book_id, fmt, file_hash = book.id, book.format, book.file_hash
         src = Path(book.file_path)
 
     if not can_convert(fmt):
-        await _patch(conversion_id, status=ConversionStatus.failed,
-                     error=f"cannot convert format: {fmt}", phase=None)
+        await _patch(
+            conversion_id,
+            status=ConversionStatus.failed,
+            error=f"cannot convert format: {fmt}",
+            phase=None,
+        )
         return
     if not calibre_available():
-        await _patch(conversion_id, status=ConversionStatus.failed,
-                     error="calibre (ebook-convert) is not installed", phase=None)
+        await _patch(
+            conversion_id,
+            status=ConversionStatus.failed,
+            error="calibre (ebook-convert) is not installed",
+            phase=None,
+        )
         return
     if not src.exists():
-        await _patch(conversion_id, status=ConversionStatus.failed,
-                     error="source file missing on disk", phase=None)
+        await _patch(
+            conversion_id,
+            status=ConversionStatus.failed,
+            error="source file missing on disk",
+            phase=None,
+        )
         return
 
     out = settings.exports_dir / f"{file_hash}.epub"
@@ -188,8 +208,9 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
                 await _finish(conversion_id, book_id, out, source="cached")
                 return
 
-        await _patch(conversion_id, status=ConversionStatus.running,
-                     phase="Converting…", error=None)
+        await _patch(
+            conversion_id, status=ConversionStatus.running, phase="Converting…", error=None
+        )
 
         # PDF: offloaded to the tomeforge sidecar (PDF is only convertible when a
         # sidecar is configured — see can_convert). It returns a plain EPUB;
@@ -209,8 +230,12 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
             )
 
         if result is None:
-            await _patch(conversion_id, status=ConversionStatus.failed,
-                         error="conversion failed (see server logs)", phase=None)
+            await _patch(
+                conversion_id,
+                status=ConversionStatus.failed,
+                error="conversion failed (see server logs)",
+                phase=None,
+            )
             return
 
         await _patch(conversion_id, phase="Building contents…")
@@ -219,13 +244,15 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
         # Only declare success once the finished file is on disk AND opens as a
         # valid EPUB — so "done" / "Read EPUB" never appears on a partial file.
         ok = (
-            out.exists()
-            and out.stat().st_size > 0
-            and await run_in_threadpool(_is_valid_epub, out)
+            out.exists() and out.stat().st_size > 0 and await run_in_threadpool(_is_valid_epub, out)
         )
         if not ok:
-            await _patch(conversion_id, status=ConversionStatus.failed,
-                         error="conversion finished but the EPUB was not readable", phase=None)
+            await _patch(
+                conversion_id,
+                status=ConversionStatus.failed,
+                error="conversion finished but the EPUB was not readable",
+                phase=None,
+            )
             return
 
         image_count = await run_in_threadpool(_count_images, out)
@@ -237,20 +264,24 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
         text_len = await run_in_threadpool(_extract_text_len, out)
         if not use_ocr and _looks_like_scanned_pdf(fmt, text_len, image_count):
             out.unlink(missing_ok=True)
-            await _patch(conversion_id, status=ConversionStatus.failed,
-                         error=_SCANNED_MSG, phase=None)
+            await _patch(
+                conversion_id, status=ConversionStatus.failed, error=_SCANNED_MSG, phase=None
+            )
             log.info("skipped scanned/image PDF export for conversion %s", conversion_id)
             return
 
         await _finish(
-            conversion_id, book_id, out,
-            source=toc_source, toc_count=toc_count, image_count=image_count,
+            conversion_id,
+            book_id,
+            out,
+            source=toc_source,
+            toc_count=toc_count,
+            image_count=image_count,
         )
     except Exception as e:
         # Record ANY failure on the row so the background task never dies silent.
         log.exception("epub export failed for conversion %s: %s", conversion_id, e)
-        await _patch(conversion_id, status=ConversionStatus.failed,
-                     error=str(e)[:2000], phase=None)
+        await _patch(conversion_id, status=ConversionStatus.failed, error=str(e)[:2000], phase=None)
 
 
 async def _finish(
@@ -269,9 +300,14 @@ async def _finish(
         image_count = await run_in_threadpool(_count_images, out)
     async with session_scope() as session:
         await conversions_repo.set_status(
-            session, conversion_id,
-            status=ConversionStatus.done, phase=None, error=None,
-            output_path=str(out), toc_count=toc_count, toc_source=source,
+            session,
+            conversion_id,
+            status=ConversionStatus.done,
+            phase=None,
+            error=None,
+            output_path=str(out),
+            toc_count=toc_count,
+            toc_source=source,
             image_count=image_count,
         )
         book = await books_repo.get_book(session, book_id)
@@ -366,7 +402,9 @@ def _ensure_linked_toc(out: Path) -> tuple[int, str]:
 
     tmp = out.with_name(out.stem + ".rebuild.epub")
     try:
-        book.toc = [epub.Link(href, title, f"dx_toc_{i}") for i, (_lvl, title, href) in enumerate(headings)]
+        book.toc = [
+            epub.Link(href, title, f"dx_toc_{i}") for i, (_lvl, title, href) in enumerate(headings)
+        ]
         _reset_nav_items(book)
         epub.write_epub(str(tmp), book)
         if not _is_valid_epub(tmp):

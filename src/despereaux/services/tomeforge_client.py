@@ -64,7 +64,9 @@ async def convert_pdf(
     base = host.rstrip("/")
     deadline = asyncio.get_event_loop().time() + overall_timeout
 
-    async with httpx.AsyncClient(base_url=base, timeout=_STATUS_TIMEOUT, transport=transport) as client:
+    async with httpx.AsyncClient(
+        base_url=base, timeout=_STATUS_TIMEOUT, transport=transport
+    ) as client:
         job_id = await _submit(client, src, ocr, ollama_host, model, dpi, ocr_timeout, num_ctx)
         try:
             result = await _await_job(client, job_id, deadline, on_phase)
@@ -77,12 +79,21 @@ async def convert_pdf(
 
 
 async def _submit(
-    client: httpx.AsyncClient, src: Path, ocr: str,
-    ollama_host: str | None, model: str, dpi: int, ocr_timeout: int, num_ctx: int,
+    client: httpx.AsyncClient,
+    src: Path,
+    ocr: str,
+    ollama_host: str | None,
+    model: str,
+    dpi: int,
+    ocr_timeout: int,
+    num_ctx: int,
 ) -> str:
     data = {
-        "ocr": ocr, "model": model, "dpi": str(dpi),
-        "ocr_timeout": str(ocr_timeout), "num_ctx": str(num_ctx),
+        "ocr": ocr,
+        "model": model,
+        "dpi": str(dpi),
+        "ocr_timeout": str(ocr_timeout),
+        "num_ctx": str(num_ctx),
     }
     if ollama_host:
         data["ollama_host"] = ollama_host
@@ -93,7 +104,9 @@ async def _submit(
     except httpx.HTTPError as e:
         raise SidecarError(f"tomeforge sidecar not reachable: {e}") from e
     if resp.status_code != 200:
-        raise SidecarError(f"tomeforge rejected the job (HTTP {resp.status_code}): {resp.text[:300]}")
+        raise SidecarError(
+            f"tomeforge rejected the job (HTTP {resp.status_code}): {resp.text[:300]}"
+        )
     job_id = resp.json().get("job_id")
     if not job_id:
         raise SidecarError("tomeforge did not return a job id")
@@ -101,7 +114,10 @@ async def _submit(
 
 
 async def _await_job(
-    client: httpx.AsyncClient, job_id: str, deadline: float, on_phase: PhaseCallback | None,
+    client: httpx.AsyncClient,
+    job_id: str,
+    deadline: float,
+    on_phase: PhaseCallback | None,
 ) -> SidecarResult:
     last_phase: str | None = None
     while True:
