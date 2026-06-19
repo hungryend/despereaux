@@ -100,14 +100,11 @@ def test_tomeforge_available_reflects_setting(monkeypatch):
 
 
 async def test_run_export_uses_sidecar_when_configured(tmp_path, monkeypatch):
-    """End-to-end: with a sidecar configured, run_export offloads the PDF, the
-    in-process pdf2md is never touched, and the job finishes 'done' with the
-    sidecar's engine and the EPUB promoted to the book's primary."""
+    """End-to-end: with a sidecar configured, run_export offloads the PDF and the
+    job finishes 'done' with the sidecar's engine and the EPUB promoted to the
+    book's primary. (PDF has no in-process path anymore — it's sidecar-only.)"""
     monkeypatch.setattr(epub_export, "tomeforge_available", lambda: True)
     monkeypatch.setattr(epub_export, "calibre_available", lambda: True)
-    monkeypatch.setattr(epub_export, "_pdfmd_available", lambda: (_ for _ in ()).throw(
-        AssertionError("in-process pdf2md must NOT run when the sidecar is configured")
-    ))
 
     src = tmp_path / "book.pdf"
     src.write_bytes(b"%PDF-1.4 ...")

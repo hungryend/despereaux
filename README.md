@@ -39,7 +39,7 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
   - **PDF** — native via [PDF.js], with byte-range streaming so huge files open instantly
   - **MOBI / AZW / AZW3** — auto-converted to EPUB at ingest using [Calibre] (bundled in the image)
   - **CBZ / CBR** — native page-image comic reader; archives are read on demand (CBR via the `unar` binary baked into the image), one page served at a time
-- **Convert to EPUB** — a per-book button turns PDF / MOBI / AZW into a clean, reflowable EPUB with an auto-linked table of contents. PDFs go through a Markdown intermediate ([PyMuPDF]-based `pdf2md`) for solid headings + inline images; scanned/image PDFs are detected and left as the original PDF — or OCR'd into a reflowable EPUB via the optional [`ocr` sidecar](#scanned-pdf-ocr-optional). Conversions run in the background as tracked jobs (status survives a restart) and surface in a header notifications menu when done.
+- **Convert to EPUB** — a per-book button turns PDF / MOBI / AZW into a clean, reflowable EPUB with an auto-linked table of contents. MOBI/AZW convert locally via Calibre; **PDFs convert through the optional [tomeforge sidecar](#tomeforge-conversion-sidecar)** (PDF → Markdown → EPUB, with scanned-PDF OCR), so the Convert option only appears when a sidecar is configured. Conversions run in the background as tracked jobs (status survives a restart) and surface in a header notifications menu when done.
 - **Read-aloud bridge** — EPUB and PDF readers expose a WebView JS bridge (`window.__furloughTts`) so native clients (e.g. the Furlough Android reader) can read a book aloud with sentence/word highlighting and auto page-turns.
 - **Live library indexing** — filesystem watcher catches new/changed/deleted files within seconds, plus a one-shot scan endpoint
 - **External metadata enrichment** — automatic Google Books + Open Library lookup at ingest, plus a manual picker UI with keyword search for tricky matches
@@ -183,53 +183,57 @@ curl -X POST http://despereaux:8000/api/admin/sync \
 
 A sample shell script for Readarr-style "Custom Scripts" callers is included at [`scripts/notify-despereaux.sh`](scripts/notify-despereaux.sh).
 
-### Scanned-PDF OCR (optional)
+### tomeforge conversion sidecar
 
-Born-digital PDFs and MOBI/AZW convert out of the box. **Scanned / image PDFs** (page images with no
-real text) are skipped by default — read the original PDF. To convert those too, run the optional
-**`ocr` sidecar** (Ollama + a vision model) and point despereaux at it:
+MOBI/AZW convert in-process via Calibre. **PDF→EPUB is offloaded to a
+[tomeforge](https://github.com/hungryend/tomeforge) conversion sidecar** — it does PDF → Markdown
+→ EPUB (plus scanned-PDF OCR), so despereaux carries **no** PyMuPDF dependency (MIT-only core).
+despereaux still applies its own linked-TOC guarantee + scanned backstop to whatever the sidecar
+returns.
+
+The **Convert-to-EPUB option only appears when a sidecar is configured.** Without
+`DESPEREAUX_TOMEFORGE_HOST` the button is hidden for every format and the convert endpoints reject —
+there is no in-process PDF fallback.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DESPEREAUX_OLLAMA_HOST` | _unset_ | Ollama base URL. Empty ⇒ OCR off. Set to `http://ocr:11434` (the sidecar) or any reachable Ollama. |
-| `DESPEREAUX_OLLAMA_MODEL` | `deepseek-ocr:3b` | Vision model tag (pulled by the sidecar). Alternatives: `qwen2.5vl`, `minicpm-v`, `granite3.2-vision`. |
+| `DESPEREAUX_TOMEFORGE_HOST` | _unset_ | tomeforge service base URL. Empty ⇒ no Convert option. Set to `http://tomeforge:8400` (the sidecar) or any reachable tomeforge. |
+| `DESPEREAUX_TOMEFORGE_TIMEOUT` | `1800` | Overall per-conversion ceiling (seconds). |
+
+```bash
+echo "DESPEREAUX_TOMEFORGE_HOST=http://tomeforge:8400" >> .env
+docker compose --profile tomeforge up -d        # despereaux + the tomeforge sidecar
+```
+
+The `tomeforge` service is built from the sibling [tomeforge](https://github.com/hungryend/tomeforge)
+repo (`build: ../tomeforge` in the compose file).
+
+### Scanned-PDF OCR (optional)
+
+Born-digital PDFs convert from their text layer. **Scanned / image PDFs** (page images with no real
+text) need OCR — the **tomeforge sidecar** runs it via an Ollama vision model. Bring up the bundled
+`ocr` profile (or point at any reachable Ollama, e.g. a GPU box); despereaux forwards these settings
+to the sidecar per request:
+
+| Variable | Default | Description |
+|---|---|---|
+| `DESPEREAUX_OLLAMA_HOST` | _unset_ | Ollama base URL the **sidecar** reaches. Empty ⇒ OCR off (scans skipped). Set to `http://ocr:11434` or any reachable Ollama. |
+| `DESPEREAUX_OLLAMA_MODEL` | `deepseek-ocr:3b` | Vision model tag. Alternatives: `qwen2.5vl`, `minicpm-v`, `granite3.2-vision`. |
 | `DESPEREAUX_OLLAMA_OCR_TIMEOUT` | `600` | Per-page OCR timeout (seconds). |
 | `DESPEREAUX_OLLAMA_DPI` | `150` | Page render resolution for OCR. |
 | `DESPEREAUX_OLLAMA_NUM_CTX` | `8192` | Model context window. |
 
 ```bash
-echo "DESPEREAUX_OLLAMA_HOST=http://ocr:11434" >> .env
-docker compose --profile ocr up -d        # starts despereaux + the ocr sidecar
-```
-
-The sidecar pulls the model (~6.7 GB, needs Ollama ≥ 0.13) once into the `ollama-models` volume.
-Clicking **Convert to EPUB** on a scanned PDF then runs OCR in the background — the conversions menu
-shows `OCR page N/M` and your browser is notified when it finishes. OCR is **slow on CPU** (the
-sidecar is CPU-only — minutes per book); for speed, skip the sidecar and point `DESPEREAUX_OLLAMA_HOST`
-at a GPU Ollama (NVIDIA, or AMD ROCm) with `OLLAMA_KEEP_ALIVE` set high so the model stays resident.
-
-### tomeforge conversion sidecar (optional)
-
-PDF→EPUB normally runs **in-process** and needs the AGPL `pdf` extra (PyMuPDF) baked into the image.
-Alternatively, offload it to a [tomeforge](https://github.com/hungryend/tomeforge) **conversion
-sidecar** — then despereaux can be built **without** the `pdf` extra (MIT-only core) and still convert
-PDFs. The sidecar does PDF → Markdown → EPUB (and scanned-PDF OCR, reaching the same Ollama); despereaux
-still applies its own linked-TOC guarantee and scanned backstop to the result.
-
-| Variable | Default | Description |
-|---|---|---|
-| `DESPEREAUX_TOMEFORGE_HOST` | _unset_ | tomeforge service base URL. Empty ⇒ PDF→EPUB runs in-process. Set to `http://tomeforge:8400` (the sidecar) or any reachable tomeforge. |
-| `DESPEREAUX_TOMEFORGE_TIMEOUT` | `1800` | Overall per-conversion ceiling (seconds). |
-
-```bash
 echo "DESPEREAUX_TOMEFORGE_HOST=http://tomeforge:8400" >> .env
-docker compose --profile tomeforge up -d            # despereaux + the tomeforge sidecar
-docker compose --profile tomeforge --profile ocr up -d   # …also OCR scanned PDFs
+echo "DESPEREAUX_OLLAMA_HOST=http://ocr:11434" >> .env
+docker compose --profile tomeforge --profile ocr up -d   # despereaux + tomeforge + OCR
 ```
 
-Resolution order for the PDF path: **sidecar** (if `DESPEREAUX_TOMEFORGE_HOST` is set) → **in-process**
-pdf2md (if the `pdf` extra is installed) → otherwise the Convert button reports that neither is
-available. MOBI/AZW always convert locally via Calibre, sidecar or not.
+The `ocr` profile pulls the model (~6.7 GB, needs Ollama ≥ 0.13) once into the `ollama-models`
+volume. Clicking **Convert to EPUB** on a scanned PDF then runs OCR in the background — the
+conversions menu shows `OCR page N/M` and your browser is notified when it finishes. OCR is **slow
+on CPU** (minutes per book); for speed point `DESPEREAUX_OLLAMA_HOST` at a GPU Ollama (NVIDIA, or
+AMD ROCm) with `OLLAMA_KEEP_ALIVE` set high so the model stays resident.
 
 ### File ownership
 
@@ -318,7 +322,7 @@ The repo's `docker-compose.yml` builds a fresh image from the local source. Fron
 ### Local development without Docker
 
 ```bash
-uv sync --extra formats --extra pdf   # Python deps (`pdf` = PyMuPDF, AGPL — for PDF→EPUB)
+uv sync --extra formats   # Python deps (PDF→EPUB is handled by the tomeforge sidecar)
 cd frontend && npm install && npm run build && cd ..   # frontend bundle
 uv run alembic upgrade head       # initialise the DB
 uv run uvicorn despereaux.main:app --reload --port 8000
@@ -349,13 +353,10 @@ All images include SBOM + build provenance attestations.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-The optional `pdf` extra installs **[PyMuPDF]** (AGPL-3.0, or a commercial licence from Artifex) to power the PDF → Markdown → EPUB conversion (vendored as `src/despereaux/services/pdf2md.py`). It's enabled in the Docker image by default; build without `--extra pdf` for an AGPL-free install — PDF→EPUB is then unavailable, while MOBI/AZW conversion still works. All other dependencies are permissively licensed.
+MIT — all dependencies are permissively licensed. PDF→EPUB conversion (which uses the AGPL **PyMuPDF**) lives entirely in the optional [tomeforge](https://github.com/hungryend/tomeforge) sidecar — a separate process with its own AGPL licence — so despereaux's own image carries no copyleft dependency.
 
 The mascot illustration is from [clker.com](https://www.clker.com/) (public domain clipart).
 
 [epub.js]: https://github.com/futurepress/epub.js
 [PDF.js]: https://github.com/mozilla/pdf.js
 [Calibre]: https://calibre-ebook.com/
-[PyMuPDF]: https://pymupdf.readthedocs.io/

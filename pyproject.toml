@@ -32,13 +32,6 @@ formats = [
     "pypdfium2>=4.30",
     "rarfile>=4.2",
 ]
-# Powers the PDF -> Markdown -> EPUB path (vendored services/pdf2md.py).
-# PyMuPDF is AGPL-3.0 (or commercial from Artifex); kept out of the core deps so
-# the base install stays MIT. The Docker image enables it via `uv sync --extra pdf`;
-# build without it and PDF conversion is unavailable (MOBI/AZW still work).
-pdf = [
-    "PyMuPDF>=1.24",
-]
 
 [dependency-groups]
 dev = [
@@ -72,8 +65,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["I001"]   # auto-generated; don't fight the import order
-# Vendored upstream tool — kept verbatim for easy re-sync; don't lint it.
-"src/despereaux/services/pdf2md.py" = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

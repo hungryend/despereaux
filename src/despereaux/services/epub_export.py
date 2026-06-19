@@ -2,21 +2,18 @@
 
 Pipeline (per book, run as a FastAPI BackgroundTask):
 
-  PDF  -> ``pdf2md`` (PyMuPDF) extracts Markdown + images, then Calibre converts
-          that Markdown to EPUB — embedding the images and building the nav from
-          the markdown's ``#``/``##``/``###`` headings. See ``services/pdf2md.py``
-          (the optional ``pdf`` extra). Scanned/image PDFs are detected up front
-          and, when an Ollama OCR sidecar is configured (DESPEREAUX_OLLAMA_HOST),
-          OCR'd via a vision model into reflowable text; otherwise skipped.
-  MOBI / AZW / AZW3 -> Calibre converts directly.
+  PDF  -> offloaded to the tomeforge conversion sidecar (DESPEREAUX_TOMEFORGE_HOST):
+          it does PDF -> Markdown (PyMuPDF) -> EPUB (Calibre), plus scanned-PDF OCR
+          via Ollama. PDF conversion is ONLY offered when the sidecar is configured
+          (see ``can_convert`` / ``config.tomeforge_available``); there is no
+          in-process PDF engine and no PyMuPDF dependency in this image.
+  MOBI / AZW / AZW3 -> Calibre converts directly, in-process.
 
 After conversion a linked nav/NCX is GUARANTEED with ebooklib: if Calibre's TOC is
 thin we rebuild it from the ``<h1..3>`` in the converted XHTML. That step is
 STRICTLY ADDITIVE — it only injects ``id`` anchors and rewrites the nav, so body
 text and inline images are preserved. The result is validated (opens as an EPUB)
 before the job is marked done.
-
-ebooklib + lxml are core deps; PyMuPDF (the ``pdf`` extra) is lazy-imported.
 """
 
 from __future__ import annotations
@@ -24,8 +21,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import shutil
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -34,7 +29,7 @@ import lxml.html
 from ebooklib import epub
 from fastapi.concurrency import run_in_threadpool
 
-from despereaux.config import get_settings, ocr_available, tomeforge_available
+from despereaux.config import get_settings, tomeforge_available
 from despereaux.db import session_scope
 from despereaux.models import ConversionStatus
 from despereaux.repos import books as books_repo
@@ -65,17 +60,6 @@ _COMMON_TOC_FLAGS = [
 ]
 _MOBI_FLAGS = list(_COMMON_TOC_FLAGS)
 
-# Markdown -> EPUB (pdf2md output). Calibre's Markdown Input emits real <h1..3>
-# (consumed by the level*-toc XPaths) and embeds images referenced relatively from
-# the .md file's own directory. paragraph-type off is the documented setting for
-# pre-formatted Markdown; utf-8 matches pdf2md's output.
-_MD_FLAGS = [
-    "--formatting-type", "markdown",
-    "--paragraph-type", "off",
-    "--input-encoding", "utf-8",
-    *_COMMON_TOC_FLAGS,
-]
-
 _CONVERTIBLE = {"pdf", "mobi", "azw", "azw3"}
 
 # Cap rebuilt-nav entries so a large-print doc can't produce a runaway TOC.
@@ -93,151 +77,19 @@ _SCANNED_MSG = (
     "Read the original PDF instead."
 )
 
-_NO_PDFMD_MSG = (
-    "PDF→EPUB needs either the PyMuPDF 'pdf' extra (rebuild with `--extra pdf`) or a "
-    "tomeforge sidecar (set DESPEREAUX_TOMEFORGE_HOST). (MOBI/AZW conversion is unaffected.)"
-)
-
-_OCR_UNREACHABLE_MSG = (
-    "The OCR server isn't reachable — is the `ocr` container running? "
-    "(DESPEREAUX_OLLAMA_HOST must point at a running Ollama.)"
-)
-
-_OCR_FAILED_MSG = (
-    "OCR couldn't read this PDF — the model may have run out of memory or isn't "
-    "suitable. Try a smaller DESPEREAUX_OLLAMA_MODEL or an OCR host with a GPU."
-)
-
-# Serialize OCR across books so multiple jobs don't thrash a single Ollama.
+# Serialize sidecar conversions so a single Ollama behind it isn't thrashed by
+# parallel OCR jobs.
 _OCR_SEMAPHORE = asyncio.Semaphore(1)
 
 
 def can_convert(fmt: str) -> bool:
-    """Formats that show the Convert-to-EPUB button (PDF + MOBI/AZW/AZW3)."""
-    return fmt in _CONVERTIBLE
+    """Whether the on-demand Convert-to-EPUB option is available for ``fmt``.
 
-
-# --------------------------------------------------------------------------- #
-# PDF -> Markdown (vendored pdf2md / PyMuPDF, optional `pdf` extra)
-# --------------------------------------------------------------------------- #
-
-
-def _pdfmd_available() -> bool:
-    """True when PyMuPDF (the `pdf` extra) is installed — required for the PDF path."""
-    try:
-        import fitz  # noqa: F401
-    except Exception:
-        return False
-    return True
-
-
-def _pdf_is_scan(src: Path) -> bool:
-    """Best-effort scan pre-check (PyMuPDF). Errors degrade to "not a scan" — the
-    post-conversion guard is the backstop."""
-    try:
-        from despereaux.services.pdf2md import pdf_is_scan
-    except Exception:
-        return False
-    try:
-        return pdf_is_scan(str(src))
-    except Exception as e:
-        log.warning("scan pre-check failed for %s: %s", src.name, e)
-        return False
-
-
-def _pdf_to_markdown(src: Path, workdir: Path) -> Path | None:
-    """Run pdf2md (heuristic engine, no OCR) -> `workdir/output.md` (+ `images/`).
-    Returns the markdown path, or None if nothing usable came out."""
-    from despereaux.services.pdf2md import Options, convert
-
-    # Defaults are already what we want: engine="heuristic", images=True,
-    # page_images="auto" (inline figures + full-page render only for image-dominant
-    # pages), bookmark_headings=True, heading_ratio=1.3.
-    opt = Options(out_dir=str(workdir))
-    md = convert(str(src), opt, pages_spec="", toc=True, quiet=True)
-    p = Path(md)
-    return p if p.exists() and p.stat().st_size > 0 else None
-
-
-# --------------------------------------------------------------------------- #
-# OCR fallback for scanned PDFs (pdf2md Ollama engine — optional `ocr` sidecar)
-# --------------------------------------------------------------------------- #
-
-
-def _ocr_workdir(file_hash: str) -> Path:
-    """Stable per-content OCR work dir so an interrupted run resumes cached pages."""
-    return get_settings().exports_dir / "ocr" / file_hash
-
-
-def _ollama_reachable(host: str) -> bool:
-    import urllib.request
-
-    try:
-        with urllib.request.urlopen(host.rstrip("/") + "/api/tags", timeout=5):
-            return True
-    except Exception:
-        return False
-
-
-def _page_count(src: Path) -> int:
-    from despereaux.services.pdf2md import _require_fitz
-
-    doc = _require_fitz().open(str(src))
-    try:
-        return doc.page_count
-    finally:
-        doc.close()
-
-
-def _pdf_to_markdown_ocr(src: Path, workdir: Path) -> Path | None:
-    """Run pdf2md's Ollama vision-OCR engine -> `workdir/output.md` (+ `images/`).
-    Resumable: per-page markdown is cached at `workdir/pages/page-NNN.md`."""
-    from despereaux.services.pdf2md import Options, convert
-
-    s = get_settings()
-    opt = Options(
-        out_dir=str(workdir),
-        engine="ollama",
-        ollama_host=s.ollama_host,
-        model=s.ollama_model,
-        ocr_timeout=s.ollama_ocr_timeout,
-        ocr_num_ctx=s.ollama_num_ctx,
-        dpi=s.ollama_dpi,
-        page_images="auto",
-        resume=True,
-    )
-    md = convert(str(src), opt, pages_spec="", toc=True, quiet=True)
-    p = Path(md)
-    return p if p.exists() and p.stat().st_size > 0 else None
-
-
-def _ocr_mostly_failed(md_path: Path) -> bool:
-    """True if most OCR pages errored — pdf2md writes a '(OCR failed on page N…'
-    placeholder per failed page; don't publish a junk EPUB full of placeholders."""
-    try:
-        text = md_path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return True
-    pages = text.count("<!-- page ")
-    failed = text.count("OCR failed on page")
-    return pages > 0 and failed >= max(1, (pages + 1) // 2)
-
-
-async def _poll_ocr_progress(
-    conversion_id: str, pages_dir: Path, total: int, stop: asyncio.Event
-) -> None:
-    """Update Conversion.phase to 'OCR page N/M' until `stop` is set. Stopped
-    cleanly (never cancelled mid-DB-write, which could leave a SQLite lock for the
-    subsequent status write)."""
-    while not stop.is_set():
-        try:
-            done = sum(1 for _ in pages_dir.glob("page-*.md")) if pages_dir.exists() else 0
-        except OSError:
-            done = 0
-        label = f"OCR page {min(done, total)}/{total}" if total else "Running OCR…"
-        await _patch(conversion_id, phase=label)
-        with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=3)
+    Gated on the tomeforge sidecar: PDF→EPUB runs there, so we only surface the
+    Convert option (for ANY format) when a sidecar is configured — without one the
+    button is hidden and the convert endpoints reject. MOBI/AZW still convert via
+    local Calibre once the option is shown."""
+    return tomeforge_available() and fmt in _CONVERTIBLE
 
 
 # --------------------------------------------------------------------------- #
@@ -339,82 +191,19 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
         await _patch(conversion_id, status=ConversionStatus.running,
                      phase="Converting…", error=None)
 
-        # PDF -> Markdown -> EPUB. Born-digital: pdf2md heuristic. Scanned/image:
-        # OCR via the Ollama sidecar when configured, else skip. MOBI/AZW: Calibre.
+        # PDF: offloaded to the tomeforge sidecar (PDF is only convertible when a
+        # sidecar is configured — see can_convert). It returns a plain EPUB;
+        # despereaux still runs its TOC guarantee + scanned backstop below.
+        # `use_ocr` tracks the sidecar's engine so the backstop doesn't re-skip a
+        # genuinely OCR'd book. MOBI/AZW: local Calibre.
         use_ocr = False
-        ocr_work: Path | None = None
-        if fmt == "pdf" and tomeforge_available():
-            # Offload to the tomeforge sidecar (no local PyMuPDF needed). It returns
-            # a plain EPUB; despereaux still runs its TOC guarantee + scanned backstop
-            # below. `use_ocr` tracks the sidecar's engine so the backstop doesn't
-            # re-skip a genuinely OCR'd book.
+        if fmt == "pdf":
             sresult = await _convert_pdf_via_sidecar(conversion_id, src, out)
             if sresult is None:
                 return
             use_ocr = sresult.engine == "ocr"
             result = out
-        elif fmt == "pdf":
-            if not _pdfmd_available():
-                await _patch(conversion_id, status=ConversionStatus.failed,
-                             error=_NO_PDFMD_MSG, phase=None)
-                return
-            is_scan = await run_in_threadpool(_pdf_is_scan, src)
-            use_ocr = is_scan and ocr_available()
-
-            if is_scan and not use_ocr:
-                await _patch(conversion_id, status=ConversionStatus.failed,
-                             error=_SCANNED_MSG, phase=None)
-                log.info("skipped scanned/image PDF (no OCR) for conversion %s", conversion_id)
-                return
-
-            if use_ocr:
-                if not await run_in_threadpool(_ollama_reachable, settings.ollama_host or ""):
-                    await _patch(conversion_id, status=ConversionStatus.failed,
-                                 error=_OCR_UNREACHABLE_MSG, phase=None)
-                    return
-                await _patch(conversion_id, engine="ocr")
-                ocr_work = _ocr_workdir(file_hash)
-                ocr_work.mkdir(parents=True, exist_ok=True)
-                total = await run_in_threadpool(_page_count, src)
-                await _patch(conversion_id, phase="Running OCR…")
-                stop = asyncio.Event()
-                poller = asyncio.create_task(
-                    _poll_ocr_progress(conversion_id, ocr_work / "pages", total, stop)
-                )
-                try:
-                    async with _OCR_SEMAPHORE:  # one book OCR'ing at a time
-                        md = await run_in_threadpool(_pdf_to_markdown_ocr, src, ocr_work)
-                finally:
-                    stop.set()  # clean stop (don't cancel mid-DB-write -> avoids a lock)
-                    await asyncio.gather(poller, return_exceptions=True)
-                if md is None:
-                    await _patch(conversion_id, status=ConversionStatus.failed,
-                                 error="OCR produced no text from this PDF", phase=None)
-                    return
-                if await run_in_threadpool(_ocr_mostly_failed, md):
-                    await _patch(conversion_id, status=ConversionStatus.failed,
-                                 error=_OCR_FAILED_MSG, phase=None)
-                    return
-                result = await convert_to_epub(
-                    md, out, extra_args=_MD_FLAGS, overwrite=True, timeout=_EXPORT_TIMEOUT
-                )
-            else:
-                await _patch(conversion_id, engine="heuristic")
-                work = Path(tempfile.mkdtemp(prefix=f"pdfmd-{file_hash[:12]}-", dir=settings.exports_dir))
-                try:
-                    await _patch(conversion_id, phase="Reading PDF…")
-                    md = await run_in_threadpool(_pdf_to_markdown, src, work)
-                    if md is None:
-                        await _patch(conversion_id, status=ConversionStatus.failed,
-                                     error="could not extract text from this PDF", phase=None)
-                        return
-                    # overwrite=True: on a cache miss always regenerate from scratch.
-                    result = await convert_to_epub(
-                        md, out, extra_args=_MD_FLAGS, overwrite=True, timeout=_EXPORT_TIMEOUT
-                    )
-                finally:
-                    shutil.rmtree(work, ignore_errors=True)  # drop output.md + images/ temp tree
-        else:  # mobi / azw / azw3 — Calibre directly (unchanged)
+        else:  # mobi / azw / azw3 — Calibre directly
             result = await convert_to_epub(
                 src, out, extra_args=_MOBI_FLAGS, overwrite=True, timeout=_EXPORT_TIMEOUT
             )
@@ -441,10 +230,10 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
 
         image_count = await run_in_threadpool(_count_images, out)
 
-        # Scanned/image PDF backstop: if the result is basically page-images with
-        # no real text, don't publish a useless EPUB that also breaks the
-        # reflowable reader — keep the user on the original PDF.
-        # Backstop only for the heuristic path — OCR output is real text, never re-skip it.
+        # Scanned/image PDF backstop: if the sidecar's heuristic result is basically
+        # page-images with no real text, don't publish a useless EPUB that also breaks
+        # the reflowable reader — keep the user on the original PDF. Skipped when the
+        # sidecar OCR'd it (OCR output is real text, never re-skip it).
         text_len = await run_in_threadpool(_extract_text_len, out)
         if not use_ocr and _looks_like_scanned_pdf(fmt, text_len, image_count):
             out.unlink(missing_ok=True)
@@ -457,9 +246,6 @@ async def run_export(conversion_id: str, *, force: bool = False) -> None:
             conversion_id, book_id, out,
             source=toc_source, toc_count=toc_count, image_count=image_count,
         )
-        if use_ocr and ocr_work is not None:
-            # Success — drop the OCR resume cache (kept on failure so a retry resumes).
-            shutil.rmtree(ocr_work, ignore_errors=True)
     except Exception as e:
         # Record ANY failure on the row so the background task never dies silent.
         log.exception("epub export failed for conversion %s: %s", conversion_id, e)
@@ -572,8 +358,8 @@ def _ensure_linked_toc(out: Path) -> tuple[int, str]:
     if existing >= 2:
         return (existing, "calibre")
 
-    # Rebuild from real headings in the converted XHTML (both the pdf2md markdown
-    # pipeline and MOBI yield proper <h1..3>).
+    # Rebuild from real headings in the converted XHTML (both the sidecar's
+    # Markdown pipeline and MOBI yield proper <h1..3>).
     headings = _collect_xhtml_headings(book)[:_MAX_HEADINGS]
     if not headings:
         return (existing, "none")

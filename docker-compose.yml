@@ -61,11 +61,11 @@ services:
       - DESPEREAUX_OLLAMA_HOST=${DESPEREAUX_OLLAMA_HOST:-}
       - DESPEREAUX_OLLAMA_MODEL=${DESPEREAUX_OLLAMA_MODEL:-deepseek-ocr:3b}
 
-      # === Optional tomeforge conversion sidecar (the `tomeforge` service below) ===
-      # Empty = PDF→EPUB runs in-process (needs the PyMuPDF `pdf` extra in the image).
-      # Set to http://tomeforge:8400 and run with `--profile tomeforge` to offload
-      # PDF→Markdown→EPUB to the sidecar instead — letting you build despereaux
-      # WITHOUT the AGPL PyMuPDF dep. MOBI/AZW still convert locally via Calibre.
+      # === tomeforge conversion sidecar (the `tomeforge` service below) ===
+      # PDF→EPUB is offloaded to tomeforge — there is no in-process PDF engine.
+      # Empty = the Convert-to-EPUB option is hidden for ALL formats. Set to
+      # http://tomeforge:8400 and run with `--profile tomeforge` to enable it.
+      # MOBI/AZW then convert locally via Calibre; PDFs go to the sidecar.
       - DESPEREAUX_TOMEFORGE_HOST=${DESPEREAUX_TOMEFORGE_HOST:-}
 
     volumes:

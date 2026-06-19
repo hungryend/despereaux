@@ -3,8 +3,8 @@
 - the ebooklib linked-TOC guarantee (rebuild from headings, anchors resolve)
 - image counting, text length, scan heuristic, and the can_convert gate
 
-The Calibre subprocess + the pdf2md pipeline are exercised in
-tests/test_pdf2md_pipeline.py / manually; here we validate the EPUB
+The Calibre subprocess is exercised manually; the PDF path (tomeforge sidecar)
+is covered in tests/test_tomeforge_sidecar.py. Here we validate the EPUB
 post-processing that's easy to get wrong.
 """
 
@@ -137,8 +137,14 @@ def test_looks_like_scanned_pdf():
     assert epub_export._looks_like_scanned_pdf("pdf", 100, 0) is False    # no images
 
 
-def test_can_convert_gate():
+def test_can_convert_gate(monkeypatch):
+    # Convert is gated on the tomeforge sidecar (conftest configures one by default).
     assert epub_export.can_convert("pdf")
     assert epub_export.can_convert("mobi")
     assert not epub_export.can_convert("epub")
     assert not epub_export.can_convert("cbz")
+
+    # Without a sidecar configured, NOTHING is convertible — the button is hidden.
+    monkeypatch.setattr(epub_export, "tomeforge_available", lambda: False)
+    assert not epub_export.can_convert("pdf")
+    assert not epub_export.can_convert("mobi")
