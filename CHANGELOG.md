@@ -19,6 +19,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   mode it bounces to the outpost's per-app sign-out, which clears the proxy
   session (also the fix for "still signed in as the old user" after an
   Authentik impersonation).
+- **"On deck" shelf on the library home**: books you're actively reading show in
+  a continue-reading row at the top, most-recently-read first. Click a cover for
+  a menu — **Resume reading**, **View details**, or **Mark as unread** (clears your
+  saved position, so the book leaves the shelf but stays in the library). A book
+  only opened to its first page (≈0%) stays in the library, off the shelf; the
+  shelf spans all libraries and is hidden while searching. "Mark as unread" is
+  also on the book's detail page. New route `POST /book/{id}/progress/clear`.
 
 ## [0.4.0] — 2026-06-11
 

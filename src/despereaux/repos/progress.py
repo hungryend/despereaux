@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,3 +44,15 @@ async def list_progress_for_user(session: AsyncSession, *, user_id: str) -> list
         select(ReadingProgress).where(ReadingProgress.user_id == user_id)
     )
     return list(result.scalars().all())
+
+
+async def delete_progress(session: AsyncSession, *, user_id: str, book_id: str) -> None:
+    """Drop this user's reading position for a book ("mark as unread").
+
+    Removes it from the library's On-deck shelf. No-op if there's no row.
+    """
+    await session.execute(
+        delete(ReadingProgress).where(
+            ReadingProgress.user_id == user_id, ReadingProgress.book_id == book_id
+        )
+    )
