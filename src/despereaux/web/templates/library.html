@@ -1,6 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Library — despereaux{% endblock %}
 {% block content %}
+{% if on_deck %}
+  {% set back_url = ('/?library=' ~ current_library|urlencode) if current_library else '/' %}
+  <section class="on-deck" aria-label="On deck — continue reading">
+    <h2 class="deck-head">On deck</h2>
+    <div class="deck-row">
+      {% for book in on_deck %}
+        {% set p = progress_map.get(book.id) %}
+        <details class="deck-menu">
+          <summary class="deck-card" title="{{ book.title }}">
+            <div class="deck-cover">
+              {% if book.cover_path %}
+                <img src="/api/books/{{ book.id }}/cover" alt="" loading="lazy" />
+              {% else %}
+                <div class="no-cover"><span>{{ book.title[:1]|upper }}</span></div>
+              {% endif %}
+              {% if p and p > 0 %}
+                <div class="progress-bar"><span style="width: {{ (p * 100)|round(1) }}%"></span></div>
+              {% endif %}
+            </div>
+            <div class="deck-title">{{ book.title }}</div>
+          </summary>
+          <nav class="deck-menu-list">
+            <a class="deck-action" href="/read/{{ book.id }}">Resume reading</a>
+            <a class="deck-action" href="/book/{{ book.id }}">View details</a>
+            <form method="post" action="/book/{{ book.id }}/progress/clear" class="inline-form">
+              <input type="hidden" name="next" value="{{ back_url }}" />
+              <button type="submit" class="deck-action deck-action-danger">Mark as unread</button>
+            </form>
+          </nav>
+        </details>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
 <div class="library">
   {% if not books %}
     <div class="empty">
@@ -36,4 +70,28 @@
     </div>
   {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+{% if on_deck %}
+<script>
+  // On-deck menus: native <details> toggles on click; this just adds the polish
+  // of one-open-at-a-time and close-on-outside-click / Escape.
+  (function () {
+    var menus = Array.prototype.slice.call(document.querySelectorAll('details.deck-menu'));
+    if (!menus.length) return;
+    menus.forEach(function (m) {
+      m.addEventListener('toggle', function () {
+        if (!m.open) return;
+        menus.forEach(function (o) { if (o !== m) o.open = false; });
+      });
+    });
+    document.addEventListener('click', function (e) {
+      menus.forEach(function (m) { if (m.open && !m.contains(e.target)) m.open = false; });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') menus.forEach(function (m) { m.open = false; });
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

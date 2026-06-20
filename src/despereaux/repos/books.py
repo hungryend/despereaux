@@ -125,6 +125,24 @@ async def list_books(
     return list(result.scalars().all())
 
 
+async def get_books_by_ids(session: AsyncSession, ids: list[str]) -> list[Book]:
+    """Fetch books by id (authors eager-loaded), returned in the order of `ids`.
+
+    Ids with no matching book are skipped. Used by the library On-deck shelf,
+    which needs the books behind a user's reading-progress rows in
+    most-recently-read order.
+    """
+    if not ids:
+        return []
+    result = await session.execute(
+        select(Book)
+        .where(Book.id.in_(ids))
+        .options(selectinload(Book.authors).selectinload(BookAuthor.author))
+    )
+    by_id = {b.id: b for b in result.scalars().all()}
+    return [by_id[i] for i in ids if i in by_id]
+
+
 async def get_children(session: AsyncSession, parent_id: str) -> list[Book]:
     """Books attached as assets to the given parent book."""
     stmt = (

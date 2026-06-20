@@ -51,7 +51,22 @@ def _file_token(path: str | None, fallback: str) -> str:
     return fallback
 
 
+def _safe_next(raw: str | None) -> str:
+    """Sanitize a post-action redirect target to a same-site path, defaulting to
+    the library. Blocks open redirects (`//evil.com`, `https://…`) from a
+    user-supplied `next` form field."""
+    if raw and raw.startswith("/") and not raw.startswith("//"):
+        return raw
+    return "/"
+
+
 router = APIRouter(include_in_schema=False)
+
+# A book merely opened to its first page (≈0% saved progress) is part of the
+# library but not "on deck" — it joins the continue-reading shelf only once the
+# reader is meaningfully past the start. ~1% ≈ a few pages into a normal book;
+# it also absorbs the small non-zero percent EPUB.js reports on the opening page.
+ON_DECK_MIN_PERCENT = 0.01
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -64,10 +79,19 @@ async def library(
 ):
     settings = get_settings()
     books = await books_repo.list_books(session, limit=500, search=search, library=library)
-    progress_map = {
-        p.book_id: p.percent
-        for p in await progress_repo.list_progress_for_user(session, user_id=user["id"])
-    }
+    prog_rows = await progress_repo.list_progress_for_user(session, user_id=user["id"])
+    progress_map = {p.book_id: p.percent for p in prog_rows}
+    # "On deck": books the user is actively reading, most-recently-read first. A
+    # continue-reading shelf spanning all libraries, so we hide it only while
+    # searching (when the grid is a focused result set, not the home view). Books
+    # only opened to the first page (≈0%) stay in the library but off the shelf.
+    on_deck: list = []
+    if not search:
+        started = [p for p in prog_rows if p.percent > ON_DECK_MIN_PERCENT]
+        recent_ids = [p.book_id for p in sorted(started, key=lambda r: r.updated_at, reverse=True)][
+            :24
+        ]
+        on_deck = await books_repo.get_books_by_ids(session, recent_ids)
     counts = await books_repo.count_books_by_library(session)
     libraries = [
         {"name": lib.name, "book_count": counts.get(lib.name, 0)} for lib in settings.libraries
@@ -78,6 +102,7 @@ async def library(
         {
             "user": user,
             "books": books,
+            "on_deck": on_deck,
             "progress_map": progress_map,
             "search": search or "",
             "libraries": libraries,
@@ -277,6 +302,20 @@ async def delete_book(book_id: str, _user=Depends(current_user)):
     async with session_scope() as session:
         await delete_by_id(session, book_id)
     return RedirectResponse(url="/", status_code=303)
+
+
+@router.post("/book/{book_id}/progress/clear")
+async def clear_progress(
+    book_id: str,
+    next: str = Form("/"),
+    user=Depends(current_user),
+):
+    """Mark a book unread: drop the current user's reading position so it leaves
+    the On-deck shelf. `next` returns the user to where they triggered it (the
+    library view or the book's detail page)."""
+    async with session_scope() as session:
+        await progress_repo.delete_progress(session, user_id=user["id"], book_id=book_id)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 @router.post("/book/{book_id}/metadata/refresh")
