@@ -16,6 +16,12 @@
   <a href="https://github.com/hungryend/despereaux/pkgs/container/despereaux"><img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-hungryend%2Fdespereaux-blue?logo=docker"/></a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/library-home.png" alt="despereaux library home — the On deck continue-reading shelf above a sortable book grid" width="900" />
+  <br/>
+  <em>The library home — an “On deck” continue-reading shelf above a sortable grid.</em>
+</p>
+
 ---
 
 ## Quick start
@@ -34,6 +40,8 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
 ### What you get
 
 - **In-browser reader** — page-turn navigation, position retention per book, table of contents, mobile-friendly swipe + keyboard
+- **"On deck" continue-reading shelf** — books you're partway through surface in a row at the top of the library, most-recently-read first. Click a cover for a quick menu: **Resume reading**, book **details**, or **Mark as unread** (clears your saved position so the book drops off the shelf but stays in the library). Books only opened to the first page don't clutter the shelf.
+- **Sort & group** — reorder the library grid by **title** or **recently added**, or **group by author** so every book an author wrote sits under one heading (a co-authored book appears under each of its authors)
 - **Format support**:
   - **EPUB** — native via [epub.js]
   - **PDF** — native via [PDF.js], with byte-range streaming so huge files open instantly
@@ -47,6 +55,12 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
 - **Parent / asset books** — attach maps, handouts, supplements under a main book so they don't clutter the library grid
 - **Duplicate detection** — surfaces other books that share content hash, ISBN, or external ID
 - **Webhook for external import pipelines** — bearer-token-authed `/api/admin/sync` endpoint for tools like Readarr-style "Custom Scripts"
+
+<p align="center">
+  <img src="docs/screenshots/by-author.png" alt="despereaux library grouped by author, each author's books under a heading" width="900" />
+  <br/>
+  <em>“By author” gathers every book under its author — co-authored titles appear under each.</em>
+</p>
 
 ---
 
