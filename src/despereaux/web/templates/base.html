@@ -17,10 +17,11 @@
       </a>
       {% if libraries and libraries|length > 1 %}
         <nav class="library-tabs">
-          <a class="library-tab {% if not current_library %}active{% endif %}" href="/">All</a>
+          <a class="library-tab {% if not current_library %}active{% endif %}"
+             href="/{% if sort and sort != 'title' %}?sort={{ sort }}{% endif %}">All</a>
           {% for lib in libraries %}
             <a class="library-tab {% if current_library == lib.name %}active{% endif %}"
-               href="/?library={{ lib.name|urlencode }}">
+               href="/?library={{ lib.name|urlencode }}{% if sort and sort != 'title' %}&sort={{ sort }}{% endif %}">
               {{ lib.name }}<span class="count">{{ lib.book_count }}</span>
             </a>
           {% endfor %}
@@ -28,6 +29,7 @@
       {% endif %}
       <form class="search" method="get" action="/">
         {% if current_library %}<input type="hidden" name="library" value="{{ current_library }}" />{% endif %}
+        {% if sort and sort != 'title' %}<input type="hidden" name="sort" value="{{ sort }}" />{% endif %}
         <input type="search" name="search" value="{{ search|default('', true) }}" placeholder="Search title or author" />
       </form>
       {% if user %}

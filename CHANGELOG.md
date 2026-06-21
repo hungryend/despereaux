@@ -26,6 +26,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   only opened to its first page (≈0%) stays in the library, off the shelf; the
   shelf spans all libraries and is hidden while searching. "Mark as unread" is
   also on the book's detail page. New route `POST /book/{id}/progress/clear`.
+- **Sort & group the library**: a sort bar on the library home with **Title A–Z**
+  (default), **By author**, and **Recently added**. "By author" splits the grid
+  into per-author sections — a co-authored book appears under each of its
+  authors, and authorless books fall under "Unknown author". The choice carries
+  across search and library-tab navigation. New `?sort=` query param.
 
 ### Fixed
 - **Stale stylesheet after a deploy**: `app.css` is now cache-busted with a
