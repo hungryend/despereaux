@@ -27,6 +27,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   shelf spans all libraries and is hidden while searching. "Mark as unread" is
   also on the book's detail page. New route `POST /book/{id}/progress/clear`.
 
+### Fixed
+- **Stale stylesheet after a deploy**: `app.css` is now cache-busted with a
+  content-hash `?v=` (the reader bundle already did this), so a new release no
+  longer leaves browsers on a heuristically-fresh *old* stylesheet — which is
+  what made the new On-deck shelf render unstyled (over-large covers, mislaid
+  progress bar) until a hard refresh. Exposed via a `static_version()` Jinja
+  global; applied to the three templates that link `app.css` (base/login/setup).
+  Also centers the On-deck no-cover placeholder glyph.
+
 ## [0.4.0] — 2026-06-11
 
 ### Added
