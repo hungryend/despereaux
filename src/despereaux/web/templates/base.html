@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="dark light" />
     <title>{% block title %}despereaux{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
-    <link rel="stylesheet" href="/static/css/app.css" />
+    <link rel="stylesheet" href="/static/css/app.css?v={{ static_version('css/app.css') }}" />
     {% block head %}{% endblock %}
   </head>
   <body>

@@ -32,6 +32,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   authors, and authorless books fall under "Unknown author". The choice carries
   across search and library-tab navigation. New `?sort=` query param.
 
+### Fixed
+- **Stale stylesheet after a deploy**: `app.css` is now cache-busted with a
+  content-hash `?v=` (the reader bundle already did this), so a new release no
+  longer leaves browsers on a heuristically-fresh *old* stylesheet — which is
+  what made the new On-deck shelf render unstyled (over-large covers, mislaid
+  progress bar) until a hard refresh. Exposed via a `static_version()` Jinja
+  global; applied to the three templates that link `app.css` (base/login/setup).
+  Also centers the On-deck no-cover placeholder glyph.
+
 ## [0.4.0] — 2026-06-11
 
 ### Added

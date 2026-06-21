@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -27,6 +29,38 @@ from despereaux.services.metadata_lookup import (
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+STATIC_DIR = Path(__file__).parent.parent / "static"
+
+
+@lru_cache(maxsize=64)
+def _static_fingerprint(rel_path: str, _mtime: int) -> str:
+    """Short content hash of a /static file, memoized per (path, mtime) so the
+    bytes are read+hashed once per file version (re-hashed after a dev edit)."""
+    try:
+        return hashlib.blake2s((STATIC_DIR / rel_path).read_bytes(), digest_size=8).hexdigest()
+    except OSError:
+        return "dev"
+
+
+def static_version(rel_path: str) -> str:
+    """Cache-busting token for a /static asset, appended to its URL as `?v=`.
+
+    Static responses carry no Cache-Control, only ETag/Last-Modified, so without
+    this a browser applies heuristic freshness and keeps serving a STALE copy
+    after a deploy — which is exactly why the On-deck shelf rendered unstyled
+    ("super large" covers, mislaid progress bar) until a hard refresh. The token
+    is a content hash, so it changes iff the file's bytes change — independent of
+    Docker COPY-layer mtime quirks. Exposed to every template as a Jinja global.
+    """
+    try:
+        mtime = int((STATIC_DIR / rel_path).stat().st_mtime)
+    except OSError:
+        return "dev"
+    return _static_fingerprint(rel_path, mtime)
+
+
+templates.env.globals["static_version"] = static_version
 
 
 # Use the bundled reader.js mtime as a cache-busting version stamp. Hashing
