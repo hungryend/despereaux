@@ -1,5 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Library — despereaux{% endblock %}
+
+{% macro book_card(book, progress_map) %}
+  {% set authors = book.authors|map(attribute='author')|map(attribute='name')|list %}
+  <a class="book-card" href="/book/{{ book.id }}">
+    <div class="cover">
+      {% if book.cover_path %}
+        <img src="/api/books/{{ book.id }}/cover" alt="" loading="lazy" />
+      {% else %}
+        <div class="no-cover"><span>{{ book.title[:1]|upper }}</span></div>
+      {% endif %}
+      {% if book.epub_export_path %}
+        <span class="card-badge" title="EPUB version available">EPUB</span>
+      {% endif %}
+      {% set p = progress_map.get(book.id) %}
+      {% if p and p > 0 %}
+        <div class="progress-bar"><span style="width: {{ (p * 100)|round(1) }}%"></span></div>
+      {% endif %}
+    </div>
+    <div class="meta">
+      <div class="title">{{ book.title }}</div>
+      <div class="authors">{{ authors|join(', ') or '—' }}</div>
+    </div>
+  </a>
+{% endmacro %}
+
 {% block content %}
 {% if on_deck %}
   {% set back_url = ('/?library=' ~ current_library|urlencode) if current_library else '/' %}
@@ -43,31 +68,26 @@
       <pre><code>POST /api/admin/scan</code></pre>
     </div>
   {% else %}
-    <div class="book-grid">
-      {% for book in books %}
-        {% set authors = book.authors|map(attribute='author')|map(attribute='name')|list %}
-        <a class="book-card" href="/book/{{ book.id }}">
-          <div class="cover">
-            {% if book.cover_path %}
-              <img src="/api/books/{{ book.id }}/cover" alt="" loading="lazy" />
-            {% else %}
-              <div class="no-cover"><span>{{ book.title[:1]|upper }}</span></div>
-            {% endif %}
-            {% if book.epub_export_path %}
-              <span class="card-badge" title="EPUB version available">EPUB</span>
-            {% endif %}
-            {% set p = progress_map.get(book.id) %}
-            {% if p and p > 0 %}
-              <div class="progress-bar"><span style="width: {{ (p * 100)|round(1) }}%"></span></div>
-            {% endif %}
-          </div>
-          <div class="meta">
-            <div class="title">{{ book.title }}</div>
-            <div class="authors">{{ authors|join(', ') or '—' }}</div>
-          </div>
-        </a>
-      {% endfor %}
+    <div class="sort-bar" role="group" aria-label="Sort books">
+      <span class="sort-label">Sort</span>
+      <a class="sort-opt {% if sort == 'title' %}active{% endif %}" href="/?sort=title{{ filter_qs }}">Title A–Z</a>
+      <a class="sort-opt {% if sort == 'author' %}active{% endif %}" href="/?sort=author{{ filter_qs }}">By author</a>
+      <a class="sort-opt {% if sort == 'added' %}active{% endif %}" href="/?sort=added{{ filter_qs }}">Recently added</a>
     </div>
+    {% if author_groups %}
+      {% for group in author_groups %}
+        <section class="author-group">
+          <h2 class="author-bar">{{ group.author }}<span class="count">{{ group.books|length }}</span></h2>
+          <div class="book-grid">
+            {% for book in group.books %}{{ book_card(book, progress_map) }}{% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="book-grid">
+        {% for book in books %}{{ book_card(book, progress_map) }}{% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 </div>
 {% endblock %}

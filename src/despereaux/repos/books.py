@@ -103,14 +103,19 @@ async def list_books(
     search: str | None = None,
     library: str | None = None,
     include_children: bool = False,
+    order: str = "title",
 ) -> list[Book]:
     """List top-level books (parent_book_id IS NULL). Children/assets are
     hidden from the library grid by default; set include_children=True to
-    include them (used by the attach picker)."""
+    include them (used by the attach picker).
+
+    order="title" (default) sorts by sort_title; order="added" sorts by most
+    recently added first. (Author grouping is done by the caller in Python since
+    a multi-author book lands in several groups.)"""
     stmt = (
         select(Book)
         .options(selectinload(Book.authors).selectinload(BookAuthor.author))
-        .order_by(Book.sort_title)
+        .order_by(Book.added_at.desc() if order == "added" else Book.sort_title)
         .limit(limit)
         .offset(offset)
     )

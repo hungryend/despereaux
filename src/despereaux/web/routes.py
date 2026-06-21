@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -60,6 +61,24 @@ def _safe_next(raw: str | None) -> str:
     return "/"
 
 
+def _group_by_author(books: list) -> list[dict]:
+    """Group books into author sections for the "By author" library view. A book
+    is listed under EVERY one of its authors (so a co-authored book appears in
+    each contributing author's section); books with no author fall under
+    "Unknown author", sorted last. Sections are ordered by author sort-name;
+    within a section books keep their incoming (title) order."""
+    groups: dict[tuple[str, str], list] = {}
+    for book in books:
+        authors = book.authors or []
+        if authors:
+            for ba in authors:
+                groups.setdefault((ba.author.sort_name, ba.author.name), []).append(book)
+        else:
+            # ￿ sorts after any real sort_name, parking unknowns at the end.
+            groups.setdefault(("￿", "Unknown author"), []).append(book)
+    return [{"author": name, "books": items} for (_key, name), items in sorted(groups.items())]
+
+
 router = APIRouter(include_in_schema=False)
 
 # A book merely opened to its first page (≈0% saved progress) is part of the
@@ -76,9 +95,18 @@ async def library(
     user=Depends(current_user),
     search: str | None = None,
     library: str | None = None,
+    sort: str = "title",
 ):
+    if sort not in {"title", "author", "added"}:
+        sort = "title"
     settings = get_settings()
-    books = await books_repo.list_books(session, limit=500, search=search, library=library)
+    books = await books_repo.list_books(
+        session,
+        limit=500,
+        search=search,
+        library=library,
+        order=("added" if sort == "added" else "title"),
+    )
     prog_rows = await progress_repo.list_progress_for_user(session, user_id=user["id"])
     progress_map = {p.book_id: p.percent for p in prog_rows}
     # "On deck": books the user is actively reading, most-recently-read first. A
@@ -92,6 +120,11 @@ async def library(
             :24
         ]
         on_deck = await books_repo.get_books_by_ids(session, recent_ids)
+    # "By author" lists one book under each of its authors; other sorts stay flat.
+    author_groups = _group_by_author(books) if sort == "author" else None
+    # Query suffix carrying the active library/search filter onto the sort links.
+    filter_params = {k: v for k, v in (("library", library), ("search", search)) if v}
+    filter_qs = ("&" + urlencode(filter_params)) if filter_params else ""
     counts = await books_repo.count_books_by_library(session)
     libraries = [
         {"name": lib.name, "book_count": counts.get(lib.name, 0)} for lib in settings.libraries
@@ -107,6 +140,9 @@ async def library(
             "search": search or "",
             "libraries": libraries,
             "current_library": library,
+            "sort": sort,
+            "author_groups": author_groups,
+            "filter_qs": filter_qs,
         },
     )
 
