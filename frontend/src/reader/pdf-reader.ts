@@ -34,6 +34,9 @@ export class PdfReader implements Reader {
   private currentPage = 1
   private numPages = 0
   private lastSavedPage = -1
+  // Look-ahead so a next-page turn doesn't stall on a range fetch + page parse.
+  private readonly prefetchAheadCount = 2
+  private pageCache = new Map<number, pdfjsLib.PDFPageProxy>()
 
   private zoom = 1
   private fitScale = 1
@@ -162,7 +165,7 @@ export class PdfReader implements Reader {
       this.renderTask = null
     }
 
-    const page = await this.pdf.getPage(pageNum)
+    const page = this.pageCache.get(pageNum) ?? (await this.pdf.getPage(pageNum))
 
     // Fit-to-window scale, then multiply by the user's zoom. The backing store
     // is sized at fit * zoom * devicePixelRatio so text stays sharp; the CSS
@@ -202,6 +205,29 @@ export class PdfReader implements Reader {
     }
 
     this.savePositionIfChanged()
+    void this.prefetchAhead()
+  }
+
+  // Fire-and-forget warm-up of the next few pages: getPage() pulls the page's
+  // bytes (range fetch) and getOperatorList() parses it, so the eventual render()
+  // on a page turn is just rasterization. Bounded + evicted so a 200MB book
+  // doesn't accrete page proxies.
+  private async prefetchAhead(): Promise<void> {
+    if (!this.pdf) return
+    for (let d = 1; d <= this.prefetchAheadCount; d++) {
+      const n = this.currentPage + d
+      if (n > this.numPages || this.pageCache.has(n)) continue
+      try {
+        const page = await this.pdf.getPage(n)
+        await page.getOperatorList()
+        this.pageCache.set(n, page)
+      } catch {
+        /* prefetch is best-effort */
+      }
+    }
+    for (const n of this.pageCache.keys()) {
+      if (Math.abs(n - this.currentPage) > this.prefetchAheadCount + 1) this.pageCache.delete(n)
+    }
   }
 
   private savePositionIfChanged(): void {

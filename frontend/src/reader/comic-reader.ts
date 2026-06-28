@@ -5,6 +5,8 @@ import type { BookBootstrap, Reader, TocItem } from './types'
 // Mirrors the PDF reader's pagination + zoom; progress uses the same
 // {"page": N} shape so the continue-reading shelf + cross-device resume work.
 const SAVE_PAGE_DELTA = 1
+// Forward look-ahead: prefetch this many upcoming pages (plus the previous one).
+const PREFETCH_AHEAD = 3
 const MIN_ZOOM = 1
 const MAX_ZOOM = 5
 const ZOOM_STEP = 1.25
@@ -21,6 +23,9 @@ export class ComicReader implements Reader {
   private currentPage = 1
   private numPages = 0
   private lastSavedPage = -1
+  // Held refs to prefetched page images so the browser doesn't drop them from
+  // cache before we navigate; bounded + evicted to keep retained bitmaps small.
+  private prefetched = new Map<number, HTMLImageElement>()
   private zoom = 1
   private fitScale = 1
   private zoomControls: HTMLElement | null = null
@@ -95,14 +100,26 @@ export class ComicReader implements Reader {
     this.currentPage = pageNum
     this.img.src = this.pageUrl(pageNum)
     this.savePositionIfChanged()
-    this.preload(pageNum + 1)
+    for (let d = 1; d <= PREFETCH_AHEAD; d++) this.preload(pageNum + d)
     this.preload(pageNum - 1)
+    this.evictFarPrefetch()
   }
 
   private preload(page1: number): void {
     if (page1 < 1 || (this.numPages > 0 && page1 > this.numPages)) return
+    if (this.prefetched.has(page1)) return
     const im = new Image()
+    im.decoding = 'async'
     im.src = this.pageUrl(page1)
+    // Pre-decode off the main thread where supported so the page paints instantly.
+    void im.decode().catch(() => {})
+    this.prefetched.set(page1, im)
+  }
+
+  private evictFarPrefetch(): void {
+    for (const n of this.prefetched.keys()) {
+      if (Math.abs(n - this.currentPage) > PREFETCH_AHEAD + 1) this.prefetched.delete(n)
+    }
   }
 
   private sizeImage(recenter: boolean): void {
