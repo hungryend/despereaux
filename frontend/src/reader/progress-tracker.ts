@@ -1,10 +1,16 @@
 import type { SavedProgress } from './types'
 
-const DEBOUNCE_MS = 5000
+const DEBOUNCE_MS = 1500
 
 export class ProgressTracker {
   private timer: number | null = null
   private pending: { position: string; percent: number } | null = null
+  // The latest position we've ever been told about. Unlike `pending` (which
+  // flush()/beacon() null out once sent), this is NEVER cleared — so a beacon
+  // fired on page-hide can always re-send where the user actually is, even after
+  // a prior flush already drained `pending`. The server is last-write-wins, so
+  // re-sending an already-saved value is harmless.
+  private lastKnown: { position: string; percent: number } | null = null
   private inFlight = false
 
   constructor(private progressUrl: string) {}
@@ -22,6 +28,7 @@ export class ProgressTracker {
 
   schedule(position: string, percent: number): void {
     this.pending = { position, percent }
+    this.lastKnown = { position, percent }
     if (this.timer !== null) return
     this.timer = window.setTimeout(() => this.flush(), DEBOUNCE_MS)
   }
@@ -64,8 +71,12 @@ export class ProgressTracker {
    * is being torn down), falls back to keepalive fetch. Doesn't await.
    */
   beacon(): void {
-    if (!this.pending) return
-    const body = JSON.stringify(this.pending)
+    // Re-send the latest known position even if `pending` was already drained by
+    // a prior flush — on mobile the page can be hidden/torn down between flushes,
+    // and we'd rather re-PUT a known value than lose the last page(s) turned.
+    const latest = this.pending ?? this.lastKnown
+    if (!latest) return
+    const body = JSON.stringify(latest)
     this.pending = null
     if (this.timer !== null) {
       window.clearTimeout(this.timer)
