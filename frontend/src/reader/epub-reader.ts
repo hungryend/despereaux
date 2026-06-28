@@ -4,16 +4,17 @@ import { ProgressTracker } from './progress-tracker'
 import { TocPanel } from './toc-panel'
 import type { BookBootstrap, Reader, TocItem } from './types'
 
-const PROGRESS_SAVE_PERCENT_DELTA = 0.0005
-
 export class EpubReader implements Reader {
   private book: Book
   private rendition: Rendition | null = null
   private tracker: ProgressTracker
   private tocPanel: TocPanel | null = null
   private locationsReady = false
-  private lastSavedPercent = -1
+  private lastSavedCfi = ''
   private currentSectionIndex = 0
+  // Spine indices whose XHTML we've already warmed into epub.js' cache, so the
+  // look-ahead prefetch never re-fetches the same section.
+  private warmedSections = new Set<number>()
 
   // Read-aloud state: the current section tokenized into sentences, with a map
   // from character offset (in the concatenated section text) back to the DOM text
@@ -78,8 +79,14 @@ export class EpubReader implements Reader {
 
     this.rendition.on('relocated', (loc: any) => {
       this.currentSectionIndex = loc?.start?.index ?? this.currentSectionIndex
+      this.warmAdjacentSections(this.currentSectionIndex)
       const cfi: string | undefined = loc?.start?.cfi
       if (!cfi) return
+      // Gate saves on the page actually changing (the CFI), NOT on a percent
+      // delta: a small final page turn must never be suppressed, or resume lands
+      // behind where the reader stopped. The tracker's debounce rate-limits writes.
+      if (cfi === this.lastSavedCfi) return
+      this.lastSavedCfi = cfi
       let percent = 0
       if (this.locationsReady) {
         try {
@@ -91,8 +98,6 @@ export class EpubReader implements Reader {
         const total = (this.book.spine as any).length || 1
         percent = ((loc.start.index ?? 0) + 1) / total
       }
-      if (Math.abs(percent - this.lastSavedPercent) < PROGRESS_SAVE_PERCENT_DELTA) return
-      this.lastSavedPercent = percent
       this.tracker.schedule(cfi, percent)
     })
 
@@ -109,6 +114,23 @@ export class EpubReader implements Reader {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') beaconNow()
     })
+  }
+
+  // Warm the XHTML of the sections on either side of `index` into epub.js' request
+  // cache so crossing a chapter (spine) boundary renders instantly instead of
+  // stalling on a network fetch + parse. Fire-and-forget, bounded to ±1 section
+  // and de-duped, so it never pulls down the whole book.
+  private warmAdjacentSections(index: number): void {
+    const spine = this.book.spine as any
+    const total: number = spine?.length ?? 0
+    for (const i of [index + 1, index - 1]) {
+      if (i < 0 || (total && i >= total)) continue
+      if (this.warmedSections.has(i)) continue
+      const section = spine?.get?.(i)
+      if (!section) continue
+      this.warmedSections.add(i)
+      Promise.resolve(section.load(this.book.load.bind(this.book))).catch(() => {})
+    }
   }
 
   private applyReaderTheme(): void {

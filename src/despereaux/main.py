@@ -32,6 +32,24 @@ settings = get_settings()
 _background_tasks: set[asyncio.Task] = set()
 
 
+class _ImmutableStaticFiles(StaticFiles):
+    """Serve the fingerprinted reader bundle with an immutable Cache-Control.
+
+    reader.js/.css are requested with a ?v=<mtime> bust token (see web/routes.py),
+    so a new deploy always changes the URL. Stock StaticFiles emits only
+    ETag/Last-Modified, forcing a revalidation round-trip (304) on every reader
+    open; immutable caching makes repeat opens pure cache hits — notably for the
+    Furlough Android WebView on slow links. Scoped to reader/assets/ so unversioned
+    static files (e.g. css/app.css) still revalidate normally.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200 and path.replace("\\", "/").startswith("reader/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 def _configure_logging() -> None:
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
     logging.basicConfig(level=level, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
@@ -128,7 +146,7 @@ def create_app() -> FastAPI:
     )
 
     static_dir = Path(__file__).parent / "static"
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    app.mount("/static", _ImmutableStaticFiles(directory=str(static_dir)), name="static")
 
     app.add_middleware(AuthUserMiddleware)
 
