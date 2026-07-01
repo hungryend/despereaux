@@ -44,6 +44,8 @@ src/despereaux/static/reader/
 .coverage
 htmlcov/
 .ruff_cache/
+# Smoke-tier throwaway container state (docker-compose.ci.yml volumes)
+.smoke/
 
 # Logs
 *.log

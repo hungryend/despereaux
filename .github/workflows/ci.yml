@@ -123,10 +123,78 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy
 
+  smoke-test:
+    name: Container smoke + reader e2e
+    runs-on: ubuntu-latest
+    needs: [docker-build-scan]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Rebuild from the gha cache the scan job just populated — effectively a
+      # cache hit; gives this job the same image bytes under a stable tag.
+      - name: Build image (cache hit)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: despereaux:ci
+          cache-from: type=gha
+
+      - name: Sync deps (incl. dev)
+        run: uv sync --frozen --extra formats
+
+      - name: Install Playwright Chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: Seed smoke fixtures
+        run: |
+          mkdir -p .smoke/ebooks .smoke/config
+          uv run python scripts/make_smoke_fixtures.py .smoke/ebooks
+
+      - name: Start container
+        run: docker compose -f docker-compose.ci.yml up -d --wait --wait-timeout 120
+
+      # EPUB→MOBI inside the container: seeds the MOBI fixture for the
+      # auto-convert check AND proves the Calibre toolchain runs on the
+      # current base image.
+      - name: Generate MOBI in-container (Calibre probe)
+        run: >
+          docker compose -f docker-compose.ci.yml exec -T despereaux
+          ebook-convert /ebooks/sample.epub /ebooks/sample.mobi
+
+      - name: Run smoke suite (black-box + browser)
+        env:
+          DESPEREAUX_SMOKE_URL: http://localhost:8810
+          DESPEREAUX_SMOKE_RW: "1"
+          DESPEREAUX_SMOKE_CONVERT: "1"
+          DESPEREAUX_SMOKE_BROWSER: "1"
+        run: uv run pytest tests/smoke -q
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker compose -f docker-compose.ci.yml logs --no-color
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.ci.yml down -v
+
   publish:
     name: Publish image (GHCR)
     runs-on: ubuntu-latest
-    needs: [docker-build-scan]
+    # Publishing is gated on the smoke tier: every image that reaches GHCR has
+    # booted, migrated a fresh DB, scanned a library, converted a MOBI via
+    # Calibre, and rendered an EPUB + PDF in a real browser.
+    needs: [docker-build-scan, smoke-test]
     # Only on merge to main (push), never on PRs / forks. Fork PRs have no
     # package-write token and we never publish un-reviewed code.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

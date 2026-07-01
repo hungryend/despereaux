@@ -8,6 +8,29 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Regression suite** ahead of the full dependency refresh, in three tiers.
+  In-repo: ~70 new tests covering the previously untested read path
+  (`/api/books/{id}/file` ETag/304/Range/content-negotiation, covers,
+  manifest, download logging), books search/filter/pagination, the progress
+  API (incl. per-user isolation), libraries, EPUB/PDF ingest end-to-end (the
+  pypdfium2 cover render finally has coverage), the scanner, cover generation,
+  bcrypt/session primitives — plus the first-ever automated run of the real
+  alembic migration chain (upgrade-to-head, idempotency, and a
+  model-vs-migration drift check with a documented allowlist of pre-existing
+  benign index divergences). Black-box: an env-gated smoke tier
+  (`tests/smoke`, enabled by `DESPEREAUX_SMOKE_URL`) that drives a *running*
+  instance over real HTTP — auth bootstrap through native `/setup` + the
+  default API key, Range/304 over a real socket, reader assets, watcher
+  ingest, in-container Calibre MOBI→EPUB auto-convert, and in-container PDF
+  metadata/cover extraction; point it at any deployment read-only with
+  `DESPEREAUX_SMOKE_TOKEN` (no `DESPEREAUX_SMOKE_RW`). Browser: Playwright
+  checks that epub.js actually paginates and PDF.js actually rasterises in
+  headless Chromium (`DESPEREAUX_SMOKE_BROWSER=1`). CI gains a `smoke-test`
+  job (compose up the freshly built image via new `docker-compose.ci.yml`,
+  seed fixtures with `scripts/make_smoke_fixtures.py`, run the black-box +
+  browser tiers), and **publishing to GHCR is now gated on it** — every
+  published image has booted, migrated a fresh DB, scanned a library,
+  converted a MOBI, and rendered an EPUB + PDF in a real browser.
 - **Per-user default API key, revealable on demand**: every user automatically
   gets an "API key" on their Account page — masked until revealed, with Copy
   and Regenerate buttons — for pasting into client apps (Furlough). Unlike
