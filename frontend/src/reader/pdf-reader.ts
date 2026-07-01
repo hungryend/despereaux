@@ -26,6 +26,9 @@ interface PdfPosition {
 
 export class PdfReader implements Reader {
   private pdf: pdfjsLib.PDFDocumentProxy | null = null
+  // Kept for teardown: since pdfjs-dist 5/6, destroy() lives on the loading
+  // task (PDFDocumentProxy.destroy was removed).
+  private loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null
   private tracker: ProgressTracker
   private tocPanel: TocPanel | null = null
   private container: HTMLElement | null = null
@@ -57,7 +60,7 @@ export class PdfReader implements Reader {
     root.classList.add('pdf-mode')
     root.appendChild(this.canvas)
 
-    const loadingTask = pdfjsLib.getDocument({
+    this.loadingTask = pdfjsLib.getDocument({
       url: this.bootstrap.fileUrl,
       withCredentials: true,
       // Range requests + streaming so opening a 200MB book doesn't download
@@ -66,7 +69,7 @@ export class PdfReader implements Reader {
       disableStream: false,
       rangeChunkSize: 65536,
     })
-    this.pdf = await loadingTask.promise
+    this.pdf = await this.loadingTask.promise
     this.numPages = this.pdf.numPages
 
     // Restore saved position.
@@ -185,10 +188,8 @@ export class PdfReader implements Reader {
     this.canvas.style.width = `${viewport.width / dpr}px`
     this.canvas.style.height = `${viewport.height / dpr}px`
 
-    const ctx = this.canvas.getContext('2d')
-    if (!ctx) return
-
-    this.renderTask = page.render({ canvasContext: ctx, viewport })
+    // pdfjs-dist >=6 takes the canvas itself (canvasContext was removed).
+    this.renderTask = page.render({ canvas: this.canvas, viewport })
     try {
       await this.renderTask.promise
     } catch (e: any) {
@@ -544,7 +545,8 @@ export class PdfReader implements Reader {
 
   destroy(): void {
     this.renderTask?.cancel()
-    void this.pdf?.destroy()
+    void this.loadingTask?.destroy()
+    this.pdf = null
     this.canvas.remove()
     this.zoomControls?.remove()
     this.container?.classList.remove('pdf-mode')

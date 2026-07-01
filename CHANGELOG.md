@@ -55,6 +55,24 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   authors, and authorless books fall under "Unknown author". The choice carries
   across search and library-tab navigation. New `?sort=` query param.
 
+### Changed
+- **All dependencies refreshed to latest** (July 2026), interpreter and
+  toolchain included. Runtime image now runs **Python 3.13**
+  (`python:3.13-slim`; frontend build stage `node:24-alpine`), and
+  `.python-version` (3.13) is now committed so local dev, CI, and the image
+  share one interpreter. Python packages: fastapi 0.139, uvicorn 0.49,
+  **structlog 26**, alembic 1.18.5, Pillow 12.3, pypdfium2 5.11, plus
+  pyproject floors raised to match the lock (bcrypt>=5.0, ebooklib>=0.20,
+  lxml>=6.1, httpx>=0.28, watchfiles>=1.2, aiosqlite>=0.22, …). Frontend:
+  **pdfjs-dist 4 → 6** (reader updated for the removed `canvasContext` render
+  parameter and the loading-task-owned teardown), **Vite 6 → 8**
+  (Rolldown-based), TypeScript 6; epubjs stays 0.3.93 (upstream latest). CI:
+  `astral-sh/setup-uv@v8`, Node 24. Dependabot now opens grouped PRs for
+  majors too (`python-major`/`npm-major` groups) instead of silently skipping
+  them. `alembic.ini` gains `path_separator = os` (silences the alembic 1.16+
+  deprecation). Verified by the full regression suite (148 in-repo tests on
+  3.13) and the container smoke + browser tier in CI.
+
 ### Fixed
 - **Stale stylesheet after a deploy**: `app.css` is now cache-busted with a
   content-hash `?v=` (the reader bundle already did this), so a new release no
