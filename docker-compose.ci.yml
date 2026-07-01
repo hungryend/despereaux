@@ -1,0 +1,29 @@
+# CI/smoke-only compose: brings up the locally-built image for the black-box
+# regression tier (tests/smoke). Fresh throwaway state under ./.smoke/
+# (gitignored) — NOT for real deployments; see docker-compose.yml for those.
+#
+#   docker build -t despereaux:ci .
+#   uv run python scripts/make_smoke_fixtures.py .smoke/ebooks
+#   docker compose -f docker-compose.ci.yml up -d --wait
+#   DESPEREAUX_SMOKE_URL=http://localhost:8810 DESPEREAUX_SMOKE_RW=1 uv run pytest tests/smoke -q
+#   docker compose -f docker-compose.ci.yml down -v
+
+services:
+  despereaux:
+    image: ${DESPEREAUX_IMAGE:-despereaux:ci}
+    container_name: despereaux-smoke
+    ports:
+      - "8810:8000"
+    environment:
+      DESPEREAUX_LIBRARY_PATH: /ebooks
+      DESPEREAUX_DATA_DIR: /config
+      DESPEREAUX_DB_URL: sqlite+aiosqlite:////config/despereaux.db
+      # The smoke suite asserts real auth: no dev-mode auto-user, native login,
+      # first-run /setup driven by tests/smoke/conftest.py.
+      DESPEREAUX_DEV_MODE: "false"
+      DESPEREAUX_AUTH_MODE: native
+      DESPEREAUX_LOG_LEVEL: INFO
+    volumes:
+      - ./.smoke/ebooks:/ebooks
+      - ./.smoke/config:/config
+    # Healthcheck comes from the image (curl /healthz); `up --wait` keys off it.
