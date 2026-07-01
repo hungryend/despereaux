@@ -19,7 +19,9 @@ export default defineConfig({
         entryFileNames: 'assets/reader.js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith('.css')) return 'assets/reader.css'
+          // `names` replaced the deprecated singular `name` (Rollup 4 / Vite 6+).
+          const name = assetInfo.names?.[0]
+          if (name?.endsWith('.css')) return 'assets/reader.css'
           return 'assets/[name][extname]'
         },
       },

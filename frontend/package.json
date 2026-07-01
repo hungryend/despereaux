@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "epubjs": "^0.3.93",
-    "pdfjs-dist": "^4.10.38"
+    "pdfjs-dist": "^6.1.200"
   },
   "devDependencies": {
-    "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "typescript": "^6.0.3",
+    "vite": "^8.1.2"
   },
   "overrides": {
     "@xmldom/xmldom": "^0.9.10"

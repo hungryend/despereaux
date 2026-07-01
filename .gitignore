@@ -5,7 +5,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-.python-version
+# .python-version IS committed: local dev, CI, and the Docker image must all
+# run the same interpreter (pinned 3.13; image is python:3.13-slim).
 
 # uv
 .uv/

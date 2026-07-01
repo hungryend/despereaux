@@ -15,6 +15,11 @@ updates:
         update-types: ["patch"]
       python-minor:
         update-types: ["minor"]
+      # Majors arrive as their own grouped PR (previously they were silently
+      # excluded and needed manual sweeps). The regression suite + smoke-gated
+      # publish are the safety net.
+      python-major:
+        update-types: ["major"]
 
   # Frontend (Vite reader).
   - package-ecosystem: "npm"
@@ -31,8 +36,10 @@ updates:
         update-types: ["patch"]
       npm-minor:
         update-types: ["minor"]
+      npm-major:
+        update-types: ["major"]
 
-  # Docker base images (python:3.12-slim, node:22-alpine).
+  # Docker base images (python:3.13-slim, node:24-alpine).
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
