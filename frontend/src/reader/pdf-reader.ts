@@ -1,5 +1,11 @@
-import * as pdfjsLib from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// PINNED to pdf.js v5 + its LEGACY build on purpose: v6 raised the browser
+// floor to Chromium 125+ even in its legacy bundle (mozilla/pdf.js#21152),
+// which broke PDF reading on the household tablets / Android WebViews — the
+// reader died before ever fetching the PDF. v5's legacy build supports
+// Chrome 110+ with the same API and worker filename. A dependabot ignore
+// rule keeps v6 from coming back via the npm-major group.
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 import { ProgressTracker } from './progress-tracker'
 import { TocPanel } from './toc-panel'

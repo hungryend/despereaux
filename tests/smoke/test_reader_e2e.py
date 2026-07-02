@@ -195,4 +195,35 @@ def test_pdf_renders_in_reader(reader_page, smoke) -> None:
     assert canvas is not None
     box = canvas.bounding_box()
     assert box and box["width"] > 50 and box["height"] > 50, f"canvas too small: {box}"
-    assert not errors, f"reader console errors on PDF open: {errors}"
+
+    # Turn a page: re-renders onto the same canvas — the reuse pattern a
+    # pdf.js major bump is most likely to break (and one render alone
+    # wouldn't catch). Two subtleties learned the hard way:
+    # - the canvas paints DURING reader.start() but the nav buttons bind just
+    #   after, so wait for __despereaux_reader (assigned last in bootstrap);
+    # - the reader RESTORES the saved reading position, so the start page is
+    #   whatever an earlier run left behind — assert RELATIVE movement, and
+    #   step backwards first if we happen to be parked on the last page.
+    page.wait_for_function("() => !!window.__despereaux_reader", timeout=RENDER_TIMEOUT_MS)
+    start = page.evaluate("window.__despereaux_reader.currentPage")
+    num_pages = page.evaluate("window.__despereaux_reader.numPages")
+    assert num_pages >= 2, f"fixture PDF should be multi-page, got {num_pages}"
+    if start >= num_pages:
+        page.click("#reader-prev")
+        page.wait_for_function(
+            f"() => window.__despereaux_reader.currentPage === {start - 1}",
+            timeout=RENDER_TIMEOUT_MS,
+        )
+        start -= 1
+
+    page.click("#reader-next")
+    page.wait_for_function(
+        f"() => window.__despereaux_reader.currentPage === {start + 1}",
+        timeout=RENDER_TIMEOUT_MS,
+    )
+    page.click("#reader-prev")
+    page.wait_for_function(
+        f"() => window.__despereaux_reader.currentPage === {start}",
+        timeout=RENDER_TIMEOUT_MS,
+    )
+    assert not errors, f"reader console errors on PDF open/page-turn: {errors}"
