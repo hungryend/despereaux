@@ -6,11 +6,10 @@
   --accent: #d4a64b;
   --border: #2a2d34;
   --reader-bar-h: 44px;
-  /* Lane reserved at each edge for the floating page-turn buttons:
-     button inset (14px) + button width (56px) + breathing room. The EPUB
-     column is inset by this so text reflows beside the buttons instead of
-     running underneath them. */
-  --nav-gutter: 78px;
+  /* Horizontal strip reserved for the page-turn buttons (above or below the
+     text, user's choice via the ⇅ toggle — html gets .nav-top/.nav-bottom).
+     The text column keeps its full width and never runs under the buttons. */
+  --nav-strip-h: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -48,27 +47,24 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   background: var(--bg);
 }
 
-/* EPUB mode: keep the text column clear of the fixed page-turn buttons.
-   On wide viewports the 900px cap still wins; the calc only bites once the
-   window is narrow enough that the buttons would otherwise sit on the text
-   (anything under ~1040px — tablets, phones, the Furlough WebView). epub.js
-   must see this width before it renders, so EpubReader adds .epub-mode
-   before renderTo(). */
-#reader-root.epub-mode {
-  width: calc(100% - 2 * var(--nav-gutter));
-}
+/* Reserve the nav strip on the chosen edge so content (EPUB text, PDF canvas,
+   comic page) never sits under the page-turn buttons. The class is applied to
+   <html> pre-paint (inline script in reader.html), so epub.js paginates at
+   the final size from the start. */
+.nav-top #reader-root { top: calc(var(--reader-bar-h) + var(--nav-strip-h)); }
+.nav-bottom #reader-root { bottom: var(--nav-strip-h); }
 
 .reader-nav {
   position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 56px;
-  height: 96px;
+  /* 64px keeps corner buttons clear of Furlough's bottom-center mini-player
+     on ~412dp phones if a user explicitly picks the bottom strip in-app. */
+  width: 64px;
+  height: 40px;
   background: rgba(20, 22, 27, 0.85);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  font-size: 2.6rem;
+  font-size: 1.7rem;
   line-height: 1;
   font-family: ui-sans-serif, system-ui, sans-serif;
   cursor: pointer;
@@ -78,8 +74,8 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   user-select: none;
   z-index: 11;
   transition: opacity 0.2s ease, background 0.2s ease;
-  opacity: 0.55;
-  padding: 0 0 6px 0;
+  opacity: 0.7;
+  padding: 0 0 4px 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 .reader-nav:hover,
@@ -89,16 +85,12 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   color: var(--accent);
   outline: none;
 }
-.reader-nav:active { transform: translateY(-50%) scale(0.95); }
+.reader-nav:active { transform: scale(0.95); }
 .reader-nav-prev { left: 14px; }
 .reader-nav-next { right: 14px; }
-
-@media (max-width: 480px) {
-  :root { --nav-gutter: 54px; }  /* 6px inset + 44px button + air */
-  .reader-nav { width: 44px; height: 72px; font-size: 2rem; }
-  .reader-nav-prev { left: 6px; }
-  .reader-nav-next { right: 6px; }
-}
+/* Centered in the reserved strip on whichever edge is active. */
+.nav-top .reader-nav { top: calc(var(--reader-bar-h) + (var(--nav-strip-h) - 40px) / 2); }
+.nav-bottom .reader-nav { bottom: calc((var(--nav-strip-h) - 40px) / 2); }
 
 #toc-panel {
   position: fixed; top: var(--reader-bar-h); right: 0; bottom: 0;
@@ -172,6 +164,11 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 }
 .pdf-zoom:hover {
   opacity: 1;
+}
+/* Keep the zoom pill clear of the bottom nav strip when that's where the
+   page buttons live. */
+.nav-bottom .pdf-zoom {
+  bottom: calc(var(--nav-strip-h) + 12px);
 }
 .pdf-zoom button {
   background: transparent;

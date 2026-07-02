@@ -31,6 +31,7 @@ async function bootstrap(): Promise<void> {
   try {
     await reader.start()
     wireNavButtons(reader)
+    wireNavPositionToggle()
     installTtsBridge(reader)
   } catch (e) {
     console.error('reader failed to start', e)
@@ -51,6 +52,28 @@ function wireNavButtons(reader: Reader): void {
   next?.addEventListener('click', (e) => {
     e.stopPropagation()
     reader.next()
+  })
+}
+
+// Persisted per device; reader.html applies the class pre-paint on load.
+const NAV_POS_KEY = 'despereaux:navPos'
+
+function wireNavPositionToggle(): void {
+  const btn = document.getElementById('nav-pos-toggle')
+  btn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const root = document.documentElement
+    const toTop = !root.classList.contains('nav-top')
+    root.classList.toggle('nav-top', toTop)
+    root.classList.toggle('nav-bottom', !toTop)
+    try {
+      localStorage.setItem(NAV_POS_KEY, toTop ? 'top' : 'bottom')
+    } catch {
+      /* storage unavailable — position still applies for this page */
+    }
+    // Flipping the strip changes #reader-root's height; epub.js and the PDF
+    // reader both re-measure on window resize.
+    window.dispatchEvent(new Event('resize'))
   })
 }
 
