@@ -74,7 +74,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
-- **Stale stylesheet after a deploy**: `app.css` is now cache-busted with a
+- **Page-turn buttons no longer cover EPUB text**: on viewports narrower than
+  ~1040px (tablets, phones, the Furlough WebView) the floating prev/next
+  buttons sat on top of the text column's edges. The EPUB column is now inset
+  by a per-side nav gutter (78px desktop, 54px ≤480px) so the text reflows
+  beside the buttons instead of underneath them; wide screens keep the same
+  900px column as before. Applies to EPUB mode only (PDF/comic panning is
+  unchanged), and Furlough inherits it automatically since it renders this
+  same reader page. Guarded by a new narrow-viewport Playwright regression
+  test asserting zero overlap between the buttons and the rendered iframe. `app.css` is now cache-busted with a
   content-hash `?v=` (the reader bundle already did this), so a new release no
   longer leaves browsers on a heuristically-fresh *old* stylesheet — which is
   what made the new On-deck shelf render unstyled (over-large covers, mislaid

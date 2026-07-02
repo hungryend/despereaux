@@ -57,6 +57,39 @@ def test_epub_renders_in_reader(reader_page, smoke) -> None:
     assert not errors, f"reader console errors on EPUB open: {errors}"
 
 
+def test_epub_text_clear_of_nav_buttons_on_narrow_viewport(reader_page, smoke) -> None:
+    """Regression: on narrow viewports (phones, the Furlough WebView) the fixed
+    prev/next buttons used to float over the EPUB text column. With the
+    .epub-mode gutters the rendered iframe must sit fully between the button
+    lanes — zero rect overlap."""
+    page, errors = reader_page
+    book = smoke.wait_for_book("Despereaux Sample", fmt="epub")
+
+    page.set_viewport_size({"width": 412, "height": 800})  # typical Android phone
+    page.goto(f"{SMOKE_URL}/read/{book['id']}")
+    frame_el = page.wait_for_selector("#reader-root iframe", timeout=RENDER_TIMEOUT_MS)
+    assert frame_el is not None
+
+    content = frame_el.bounding_box()
+    prev_btn = page.locator("#reader-prev").bounding_box()
+    next_btn = page.locator("#reader-next").bounding_box()
+    assert content and prev_btn and next_btn
+
+    def overlaps(a: dict, b: dict) -> bool:
+        return (
+            a["x"] < b["x"] + b["width"]
+            and b["x"] < a["x"] + a["width"]
+            and a["y"] < b["y"] + b["height"]
+            and b["y"] < a["y"] + a["height"]
+        )
+
+    assert not overlaps(prev_btn, content), f"prev button overlaps text: {prev_btn} vs {content}"
+    assert not overlaps(next_btn, content), f"next button overlaps text: {next_btn} vs {content}"
+    # The column still has usable width between the gutters.
+    assert content["width"] > 200, f"text column too narrow: {content['width']}px"
+    assert not errors, f"reader console errors: {errors}"
+
+
 def test_pdf_renders_in_reader(reader_page, smoke) -> None:
     page, errors = reader_page
     book = smoke.wait_for_book("Smoke PDF Sample", fmt="pdf")

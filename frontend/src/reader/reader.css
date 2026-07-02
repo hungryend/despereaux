@@ -6,6 +6,11 @@
   --accent: #d4a64b;
   --border: #2a2d34;
   --reader-bar-h: 44px;
+  /* Lane reserved at each edge for the floating page-turn buttons:
+     button inset (14px) + button width (56px) + breathing room. The EPUB
+     column is inset by this so text reflows beside the buttons instead of
+     running underneath them. */
+  --nav-gutter: 78px;
 }
 
 * { box-sizing: border-box; }
@@ -41,6 +46,16 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   width: 100%;
   max-width: 900px;     /* readable column on wide screens */
   background: var(--bg);
+}
+
+/* EPUB mode: keep the text column clear of the fixed page-turn buttons.
+   On wide viewports the 900px cap still wins; the calc only bites once the
+   window is narrow enough that the buttons would otherwise sit on the text
+   (anything under ~1040px — tablets, phones, the Furlough WebView). epub.js
+   must see this width before it renders, so EpubReader adds .epub-mode
+   before renderTo(). */
+#reader-root.epub-mode {
+  width: calc(100% - 2 * var(--nav-gutter));
 }
 
 .reader-nav {
@@ -79,6 +94,7 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 .reader-nav-next { right: 14px; }
 
 @media (max-width: 480px) {
+  :root { --nav-gutter: 54px; }  /* 6px inset + 44px button + air */
   .reader-nav { width: 44px; height: 72px; font-size: 2rem; }
   .reader-nav-prev { left: 6px; }
   .reader-nav-next { right: 6px; }
