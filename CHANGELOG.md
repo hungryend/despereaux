@@ -74,6 +74,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
+- **PDF reading restored on older tablets and Android WebViews**: the pdf.js
+  4→6 upgrade silently raised the minimum browser to Chromium 125+ — *even in
+  its legacy bundle* (mozilla/pdf.js#21152) — so on older devices the reader
+  died before ever requesting the PDF (blank page, no errors server-side).
+  The reader now pins **pdf.js v5.7 and ships its legacy build** (floor:
+  Chrome 110, Feb 2023) — same API, same worker filename — and a dependabot
+  ignore rule stops the v6 major from returning via the npm-major group until
+  the device fleet clears Chromium 125. The Playwright PDF check now also
+  turns pages (same-canvas re-render, the pattern majors break) and asserts
+  relative page movement so the saved-position restore can't skew it.
 - **Page-turn buttons no longer cover the text — and you choose where they
   live**: the floating prev/next buttons used to sit on top of the text
   column's edges on anything narrower than ~1040px (tablets, phones, the

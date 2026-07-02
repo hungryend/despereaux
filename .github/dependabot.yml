@@ -38,6 +38,13 @@ updates:
         update-types: ["minor"]
       npm-major:
         update-types: ["major"]
+    ignore:
+      # pdf.js >=6 raises the browser floor to Chromium 125+ even in its
+      # LEGACY build (mozilla/pdf.js#21152) — that broke PDF reading on the
+      # household tablets / Android WebViews this reader serves. Stay on v5
+      # (legacy floor: Chrome 110) until the device fleet clears 125.
+      - dependency-name: "pdfjs-dist"
+        update-types: ["version-update:semver-major"]
 
   # Docker base images (python:3.13-slim, node:24-alpine).
   - package-ecosystem: "docker"
