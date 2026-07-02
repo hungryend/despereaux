@@ -74,15 +74,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
-- **Page-turn buttons no longer cover EPUB text**: on viewports narrower than
-  ~1040px (tablets, phones, the Furlough WebView) the floating prev/next
-  buttons sat on top of the text column's edges. The EPUB column is now inset
-  by a per-side nav gutter (78px desktop, 54px ≤480px) so the text reflows
-  beside the buttons instead of underneath them; wide screens keep the same
-  900px column as before. Applies to EPUB mode only (PDF/comic panning is
-  unchanged), and Furlough inherits it automatically since it renders this
-  same reader page. Guarded by a new narrow-viewport Playwright regression
-  test asserting zero overlap between the buttons and the rendered iframe. `app.css` is now cache-busted with a
+- **Page-turn buttons no longer cover the text — and you choose where they
+  live**: the floating prev/next buttons used to sit on top of the text
+  column's edges on anything narrower than ~1040px (tablets, phones, the
+  Furlough WebView). They now dock in a reserved horizontal strip **below the
+  text (default) or above it** — a ⇅ toggle in the reader bar flips the
+  position, persisted per device (localStorage). Inside the Furlough WebView
+  the default is **top**, so the app's bottom-center Listen pill never
+  collides with the buttons. The text keeps its full
+  column width in every mode (this supersedes the interim side-gutter
+  approach that narrowed the column), and the content area reflows around the
+  strip for EPUB, PDF, and comics alike; the PDF zoom pill lifts clear of a
+  bottom strip. Furlough inherits everything, since it renders this same
+  reader page. Guarded by Playwright regression tests: zero button/text
+  overlap at phone width with a full-width column, plus toggle + reload
+  persistence at tablet width. `app.css` is now cache-busted with a
   content-hash `?v=` (the reader bundle already did this), so a new release no
   longer leaves browsers on a heuristically-fresh *old* stylesheet — which is
   what made the new On-deck shelf render unstyled (over-large covers, mislaid
