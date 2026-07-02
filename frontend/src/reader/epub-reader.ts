@@ -9,6 +9,7 @@ export class EpubReader implements Reader {
   private rendition: Rendition | null = null
   private tracker: ProgressTracker
   private tocPanel: TocPanel | null = null
+  private container: HTMLElement | null = null
   private locationsReady = false
   private lastSavedCfi = ''
   private currentSectionIndex = 0
@@ -33,6 +34,10 @@ export class EpubReader implements Reader {
   async start(): Promise<void> {
     const root = document.querySelector<HTMLElement>('#reader-root')
     if (!root) throw new Error('reader-root element missing')
+    this.container = root
+    // Inset the column clear of the page-turn buttons (reader.css gutters).
+    // Must happen BEFORE renderTo() so epub.js paginates at the final width.
+    root.classList.add('epub-mode')
 
     this.rendition = this.book.renderTo(root, {
       width: '100%',
@@ -462,5 +467,6 @@ export class EpubReader implements Reader {
     this.clearTtsHighlight()
     this.rendition?.destroy()
     this.book.destroy()
+    this.container?.classList.remove('epub-mode')
   }
 }
