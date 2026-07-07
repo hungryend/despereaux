@@ -35,7 +35,11 @@ async function bootstrap(): Promise<void> {
     installTtsBridge(reader)
   } catch (e) {
     console.error('reader failed to start', e)
-    renderUnsupported('Reader failed to start — check the console.')
+    // Surface the real reason (e.g. a PDF.js worker/version mismatch, or an
+    // unsupported-browser error) so a failure on a device we can't attach
+    // DevTools to is self-diagnosing rather than a blank page.
+    const detail = e instanceof Error ? e.message : String(e)
+    renderUnsupported(`Reader failed to start: ${detail}`)
   }
 
   // Expose for ad-hoc debugging from DevTools.
@@ -107,7 +111,15 @@ function installTtsBridge(reader: Reader): void {
 function renderUnsupported(msg: string): void {
   const root = document.querySelector<HTMLElement>('#reader-root')
   if (!root) return
-  root.innerHTML = `<div class="reader-error"><p>${msg}</p></div>`
+  // Build via textContent (not interpolated innerHTML) — msg can now carry a
+  // raw error string, which must never be parsed as HTML.
+  root.innerHTML = ''
+  const wrap = document.createElement('div')
+  wrap.className = 'reader-error'
+  const p = document.createElement('p')
+  p.textContent = msg
+  wrap.appendChild(p)
+  root.appendChild(wrap)
 }
 
 if (document.readyState === 'loading') {
