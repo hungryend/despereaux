@@ -7,6 +7,7 @@ env contract.
 
 from __future__ import annotations
 
+import re
 import time
 
 import httpx
@@ -85,7 +86,12 @@ def test_file_etag_304_and_range(smoke) -> None:
 
 def test_reader_static_assets(smoke) -> None:
     """The Vite bundle landed in the image and serves immutable — including the
-    PDF.js worker (the asset a pdfjs-dist major bump is most likely to break)."""
+    PDF.js worker (the asset a pdfjs-dist major bump is most likely to break).
+
+    The worker filename is content-hashed (assets/pdf.worker.min-<hash>.mjs) so a
+    stale `immutable` copy can't outlive a version bump — discover its real URL
+    from the built reader.js rather than hardcoding a hash.
+    """
     js = smoke.get("/static/reader/assets/reader.js")
     assert js.status_code == 200
     assert js.headers["cache-control"] == "public, max-age=31536000, immutable"
@@ -93,8 +99,14 @@ def test_reader_static_assets(smoke) -> None:
     css = smoke.get("/static/reader/assets/reader.css")
     assert css.status_code == 200
 
-    worker = smoke.get("/static/reader/assets/pdf.worker.min.mjs")
+    # PDF.js's worker URL is emitted inside reader.js by Vite's `?url` import and
+    # MUST be content-hashed — a fixed unversioned name served `immutable` is what
+    # stranded old clients on a mismatched worker after the v6->v5 revert.
+    m = re.search(r"assets/pdf\.worker\.min-[\w-]+\.mjs", js.text)
+    assert m, "content-hashed PDF.js worker URL not found in reader.js"
+    worker = smoke.get(f"/static/reader/{m.group(0)}")
     assert worker.status_code == 200
+    assert worker.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert len(worker.content) > 100_000  # a real worker bundle, not an error page
 
 
