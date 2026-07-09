@@ -8,6 +8,7 @@ async function bootstrap(): Promise<void> {
   const cfg = window.DESPEREAUX_BOOK
   if (!cfg) {
     console.error('DESPEREAUX_BOOK bootstrap missing')
+    hideLoading()
     return
   }
 
@@ -40,6 +41,9 @@ async function bootstrap(): Promise<void> {
     // DevTools to is self-diagnosing rather than a blank page.
     const detail = e instanceof Error ? e.message : String(e)
     renderUnsupported(`Reader failed to start: ${detail}`)
+  } finally {
+    // First page is up (or we've shown an error) — drop the loading overlay.
+    hideLoading()
   }
 
   // Expose for ad-hoc debugging from DevTools.
@@ -111,6 +115,7 @@ function installTtsBridge(reader: Reader): void {
 function renderUnsupported(msg: string): void {
   const root = document.querySelector<HTMLElement>('#reader-root')
   if (!root) return
+  hideLoading()
   // Build via textContent (not interpolated innerHTML) — msg can now carry a
   // raw error string, which must never be parsed as HTML.
   root.innerHTML = ''
@@ -120,6 +125,18 @@ function renderUnsupported(msg: string): void {
   p.textContent = msg
   wrap.appendChild(p)
   root.appendChild(wrap)
+}
+
+// Remove the initial-open loading overlay (rendered in reader.html) once the
+// reader has shown its first page or hit an error. Fades out, then removes the
+// node; idempotent — safe to call more than once and a no-op if already gone.
+function hideLoading(): void {
+  const el = document.getElementById('reader-loading')
+  if (!el) return
+  el.classList.add('is-done')
+  const remove = (): void => el.remove()
+  el.addEventListener('transitionend', remove, { once: true })
+  window.setTimeout(remove, 400)
 }
 
 if (document.readyState === 'loading') {
