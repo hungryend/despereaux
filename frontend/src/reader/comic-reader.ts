@@ -38,8 +38,10 @@ export class ComicReader implements Reader {
     this.img.className = 'comic-page'
     this.img.alt = ''
     this.img.decoding = 'async'
-    // fileUrl is ".../{id}/file" — page endpoint is ".../{id}/page/{n}" (0-based).
-    this.pageBase = bootstrap.fileUrl.replace(/\/file$/, '/page/')
+    // fileUrl is ".../{id}/file?v=<hash>" (optionally "&original=1") — the page
+    // endpoint is ".../{id}/page/{n}" (0-based); drop the /file segment and its
+    // query string entirely, the page endpoint needs neither.
+    this.pageBase = bootstrap.fileUrl.replace(/\/file(?:\?.*)?$/, '/page/')
     this.zoom = this.loadZoom()
   }
 
