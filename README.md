@@ -40,7 +40,7 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
 ### What you get
 
 - **In-browser reader** — page-turn navigation, position retention per book, table of contents, mobile-friendly swipe + keyboard
-- **"On deck" continue-reading shelf** — books you're partway through surface in a row at the top of the library, most-recently-read first. Click a cover for a quick menu: **Resume reading**, book **details**, or **Mark as unread** (clears your saved position so the book drops off the shelf but stays in the library). Books only opened to the first page don't clutter the shelf.
+- **"On deck" continue-reading shelf** — books you're partway through surface in a row at the top of the library, most-recently-read first. Click a cover for a quick menu: **Resume reading**, book **details**, **Mark as read**, or **Mark as unread** (clears your saved position so the book drops off the shelf but stays in the library). Books only opened to the first page don't clutter the shelf, and neither do finished ones — reading through to the last page takes a book off the shelf automatically.
 - **Sort & group** — reorder the library grid by **title** or **recently added**, or **group by author** so every book an author wrote sits under one heading (a co-authored book appears under each of its authors)
 - **Format support**:
   - **EPUB** — native via [epub.js]

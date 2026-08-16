@@ -146,10 +146,13 @@ async def library(
     # "On deck": books the user is actively reading, most-recently-read first. A
     # continue-reading shelf spanning all libraries, so we hide it only while
     # searching (when the grid is a focused result set, not the home view). Books
-    # only opened to the first page (≈0%) stay in the library but off the shelf.
+    # only opened to the first page (≈0%) stay in the library but off the shelf,
+    # and so do finished ones — read to the end, or marked read by hand.
     on_deck: list = []
     if not search:
-        started = [p for p in prog_rows if p.percent > ON_DECK_MIN_PERCENT]
+        started = [
+            p for p in prog_rows if ON_DECK_MIN_PERCENT < p.percent < progress_repo.FINISHED_PERCENT
+        ]
         recent_ids = [p.book_id for p in sorted(started, key=lambda r: r.updated_at, reverse=True)][
             :24
         ]
@@ -207,6 +210,7 @@ async def book_detail(
             "authors": [ba.author.name for ba in (book.authors or [])],
             "tags": [bt.tag.name for bt in (book.tags or [])],
             "progress": prog,
+            "finished": bool(prog and prog.percent >= progress_repo.FINISHED_PERCENT),
             "duplicates": duplicates,
             "children": children,
             "parent": parent,
@@ -385,6 +389,22 @@ async def clear_progress(
     library view or the book's detail page)."""
     async with session_scope() as session:
         await progress_repo.delete_progress(session, user_id=user["id"], book_id=book_id)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
+
+
+@router.post("/book/{book_id}/progress/finish")
+async def finish_progress(
+    book_id: str,
+    next: str = Form("/"),
+    user=Depends(current_user),
+):
+    """Mark a book read: pin progress to 100% so it leaves the On-deck shelf while
+    the saved position (and the fact it was read) survives. `next` returns the user
+    to where they triggered it."""
+    async with session_scope() as session:
+        if not await books_repo.get_book(session, book_id):
+            raise HTTPException(status_code=404, detail="book not found")
+        await progress_repo.mark_finished(session, user_id=user["id"], book_id=book_id)
     return RedirectResponse(url=_safe_next(next), status_code=303)
 
 

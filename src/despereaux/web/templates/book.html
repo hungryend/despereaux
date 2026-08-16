@@ -74,16 +74,27 @@
     <h1>{{ book.title }}</h1>
     {% if authors %}<div class="authors">{{ authors|join(', ') }}</div>{% endif %}
     {% if book.series %}<div class="series">Series: {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}</div>{% endif %}
-    {% if progress %}
-      <div class="progress-line">
-        Last read: {{ (progress.percent * 100)|round(0) }}% — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}
+    <div class="progress-line">
+      {% if finished %}
+        Finished — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}
+      {% elif progress %}
+        Last read: {{ (progress.percent * 100)|round|int }}% — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}
+      {% endif %}
+      {% if not finished %}
+        <form method="post" action="/book/{{ book.id }}/progress/finish" class="inline-form"
+              title="Mark this book read and remove it from the On-deck shelf">
+          <input type="hidden" name="next" value="/book/{{ book.id }}" />
+          <button type="submit" class="btn-link">Mark as read</button>
+        </form>
+      {% endif %}
+      {% if progress %}
         <form method="post" action="/book/{{ book.id }}/progress/clear" class="inline-form"
               title="Clear your reading position and remove this book from the On-deck shelf">
           <input type="hidden" name="next" value="/book/{{ book.id }}" />
           <button type="submit" class="btn-link">Mark as unread</button>
         </form>
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
     {% if book.description %}
       <div class="description">{{ book.description|safe }}</div>
     {% endif %}

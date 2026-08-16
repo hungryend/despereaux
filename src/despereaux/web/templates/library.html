@@ -50,6 +50,10 @@
           <nav class="deck-menu-list">
             <a class="deck-action" href="/read/{{ book.id }}">Resume reading</a>
             <a class="deck-action" href="/book/{{ book.id }}">View details</a>
+            <form method="post" action="/book/{{ book.id }}/progress/finish" class="inline-form">
+              <input type="hidden" name="next" value="{{ back_url }}" />
+              <button type="submit" class="deck-action">Mark as read</button>
+            </form>
             <form method="post" action="/book/{{ book.id }}/progress/clear" class="inline-form">
               <input type="hidden" name="next" value="{{ back_url }}" />
               <button type="submit" class="deck-action deck-action-danger">Mark as unread</button>

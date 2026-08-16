@@ -98,6 +98,11 @@ export class EpubReader implements Reader {
         const total = (this.book.spine as any).length || 1
         percent = ((loc.start.index ?? 0) + 1) / total
       }
+      // epub.js sets atEnd on the last page of the last spine item. Its CFI
+      // percentage can stop just short of 1.0 there, so pin the end of the book to
+      // exactly 100% — otherwise a fully-read EPUB never counts as finished and
+      // stays on the On-deck shelf forever.
+      if (loc?.atEnd) percent = 1
       this.tracker.schedule(cfi, percent)
     })
 
