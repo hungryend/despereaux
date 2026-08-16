@@ -37,9 +37,20 @@ RUN apt-get update && apt-get upgrade -y \
 # RCE, unsafe archive/symlink extraction, path traversal). pip only bootstraps uv.
 # Also drop the stale pip wheel bundled in ensurepip (uv never uses it) so Trivy
 # has no 25.0.1 left to flag.
+#
+# Then remove pip itself, once uv is in place. Nothing past this point needs it:
+# uv is a standalone binary that resolves and installs without pip, and the
+# runtime CMD runs uvicorn out of /app/.venv. Keeping pip drags its *vendored*
+# dependencies into the image, and Trivy reads pip/_vendor/vendor.txt as a real
+# package list — msgpack and setuptools pinned there are unfixable-in-place and
+# blocked the publish gate despite no app code importing either. Deleting pip
+# removes the vendored code outright rather than suppressing the finding.
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir uv \
-    && find /usr/local/lib -path '*/ensurepip/_bundled/*' -name 'pip-*.whl' -delete
+    && find /usr/local/lib -path '*/ensurepip/_bundled/*' -name 'pip-*.whl' -delete \
+    && python -m pip uninstall -y pip \
+    && rm -rf /usr/local/lib/python3.13/site-packages/pip \
+              /usr/local/lib/python3.13/site-packages/pip-*.dist-info
 
 WORKDIR /app
 COPY pyproject.toml ./

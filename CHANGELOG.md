@@ -74,6 +74,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
+- **Unblocked the GHCR publish gate by dropping pip from the runtime image.**
+  Trivy parses `pip/_vendor/vendor.txt` as an installed-package list, so pip's
+  vendored pins (`msgpack==1.1.2`, `setuptools==70.3.0`) were reported as
+  fixable HIGH findings and blocked publishing — even though neither is an app
+  dependency, no app code imports either, and the image's only real msgpack is
+  Debian's 1.0.3 for Calibre. pip exists purely to bootstrap uv (uv resolves and
+  installs standalone; the runtime CMD runs uvicorn from `/app/.venv`), so it is
+  now removed in the same layer once uv is installed. That deletes the vendored
+  code rather than suppressing the advisory, and closes the whole class of
+  failure — every pip upgrade re-pins its vendored set, so any future advisory
+  against one of those pins would have blocked the gate again. Verified by
+  building the image and running the gate's exact Trivy invocation (clean), plus
+  a boot check: `/healthz` ok, library renders, Calibre 8.5.0 still converts.
 - **Finished books now leave the "On deck" shelf.** The shelf filtered progress
   with a lower bound only (`> 1%`), so a book read cover-to-cover sat at 100%
   and stayed pinned to the continue-reading row forever, with no way to clear
