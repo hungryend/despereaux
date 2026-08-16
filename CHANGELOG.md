@@ -74,6 +74,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
+- **Finished books now leave the "On deck" shelf.** The shelf filtered progress
+  with a lower bound only (`> 1%`), so a book read cover-to-cover sat at 100%
+  and stayed pinned to the continue-reading row forever, with no way to clear
+  it short of "Mark as unread" (which throws the reading position away).
+  Progress at or above 99% now counts as read and drops off the shelf. The
+  threshold isn't exactly 100% because epub.js' CFI percentage can stop a hair
+  short on the final page; the paged PDF/comic readers already report an exact
+  `page/total` of 1.0. The EPUB reader now also pins the end of the book to
+  100% outright, using epub.js' `atEnd` (last page of the last spine item), so
+  "read to the last page" is deterministic rather than a rounding accident.
+  A new **Mark as read** action (deck menu + book detail page) does the same
+  thing by hand for a book finished elsewhere or abandoned near the end — it
+  pins progress to 100% but *keeps* the saved position, so it stays re-readable
+  (unlike "Mark as unread", which deletes it). The detail page now reads
+  "Finished" instead of a stale "Last read: 100%", and reports whole
+  percentages ("42%", not "42.0%").
+- **The On-deck shelf's "most-recently-read first" order actually works now.**
+  `reading_progress.updated_at` never moved after the row was first written:
+  the save path is an upsert, and a column's SQLAlchemy `onupdate` doesn't fire
+  for the `DO UPDATE` clause, so the shelf was ordering by *first-opened* time.
+  The timestamp is now set explicitly on every save.
 - **PDF reading restored on older tablets and Android WebViews**: the pdf.js
   4→6 upgrade silently raised the minimum browser to Chromium 125+ — *even in
   its legacy bundle* (mozilla/pdf.js#21152) — so on older devices the reader
