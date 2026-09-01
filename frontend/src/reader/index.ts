@@ -31,8 +31,7 @@ async function bootstrap(): Promise<void> {
 
   try {
     await reader.start()
-    wireNavButtons(reader)
-    wireNavPositionToggle()
+    wireNavZones(reader)
     installTtsBridge(reader)
   } catch (e) {
     console.error('reader failed to start', e)
@@ -50,39 +49,116 @@ async function bootstrap(): Promise<void> {
   ;(window as unknown as { __despereaux_reader: Reader }).__despereaux_reader = reader
 }
 
-function wireNavButtons(reader: Reader): void {
+// Page-turn zones: full-height strips down the left and right edges of the
+// screen (see .reader-nav in reader.css), so a page turn is always under the
+// thumb wherever the device is held — no reaching for a corner button.
+//
+// They are real <button>s, so keyboard and screen-reader users get them for
+// free. On touch they have to behave like the content underneath, because on
+// PDFs and comics the zones float over the page:
+//   - a tap turns the page (the zone's own direction);
+//   - a horizontal swipe turns the page in the swipe's direction, matching the
+//     swipe handling the readers install on the content itself;
+//   - a drag while the page is zoomed in PANS it, so the outer edges of a
+//     zoomed comic stay reachable instead of being dead strips.
+// A pinch that STARTS inside a zone is the one gesture that's lost: the zone
+// gets the touch, not the canvas. Pinching from the middle of the page (or the
+// zoom pill) still works.
+const TAP_SLOP = 12 // px of travel still counted as a tap, not a drag
+const SWIPE_TH = 50 // px of horizontal travel that counts as a swipe
+// A tap fires touchend and then a synthesised click ~300ms later; ignore the
+// click so one tap doesn't turn two pages.
+const GHOST_CLICK_MS = 700
+
+type NavDir = 'prev' | 'next'
+
+function wireNavZones(reader: Reader): void {
   const prev = document.getElementById('reader-prev')
   const next = document.getElementById('reader-next')
-  prev?.addEventListener('click', (e) => {
-    e.stopPropagation()
-    reader.prev()
-  })
-  next?.addEventListener('click', (e) => {
-    e.stopPropagation()
-    reader.next()
-  })
+  if (prev) wireNavZone(prev, reader, 'prev')
+  if (next) wireNavZone(next, reader, 'next')
 }
 
-// Persisted per device; reader.html applies the class pre-paint on load.
-const NAV_POS_KEY = 'despereaux:navPos'
+function wireNavZone(zone: HTMLElement, reader: Reader, dir: NavDir): void {
+  const turn = (d: NavDir): void => (d === 'next' ? reader.next() : reader.prev())
 
-function wireNavPositionToggle(): void {
-  const btn = document.getElementById('nav-pos-toggle')
-  btn?.addEventListener('click', (e) => {
+  let lastTouchEnd = 0
+  zone.addEventListener('click', (e) => {
     e.stopPropagation()
-    const root = document.documentElement
-    const toTop = !root.classList.contains('nav-top')
-    root.classList.toggle('nav-top', toTop)
-    root.classList.toggle('nav-bottom', !toTop)
-    try {
-      localStorage.setItem(NAV_POS_KEY, toTop ? 'top' : 'bottom')
-    } catch {
-      /* storage unavailable — position still applies for this page */
-    }
-    // Flipping the strip changes #reader-root's height; epub.js and the PDF
-    // reader both re-measure on window resize.
-    window.dispatchEvent(new Event('resize'))
+    if (Date.now() - lastTouchEnd < GHOST_CLICK_MS) return
+    turn(dir)
   })
+
+  let startX = 0
+  let startY = 0
+  let lastX = 0
+  let lastY = 0
+  let tracking = false
+  let panned = false
+
+  zone.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches.length > 1) {
+        tracking = false // multi-touch (pinch): not ours
+        return
+      }
+      tracking = true
+      panned = false
+      startX = lastX = e.touches[0].clientX
+      startY = lastY = e.touches[0].clientY
+    },
+    { passive: true }
+  )
+
+  zone.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!tracking) return
+      if (e.touches.length > 1) {
+        tracking = false
+        return
+      }
+      const t = e.touches[0]
+      // Zoomed in? The reader root is the scroll container — pan it by hand,
+      // since the browser won't scroll it for a touch that began on the zone.
+      const root = document.getElementById('reader-root')
+      if (root && isPannable(root)) {
+        root.scrollLeft -= t.clientX - lastX
+        root.scrollTop -= t.clientY - lastY
+        panned = true
+      }
+      lastX = t.clientX
+      lastY = t.clientY
+    },
+    { passive: true }
+  )
+
+  zone.addEventListener(
+    'touchend',
+    (e) => {
+      lastTouchEnd = Date.now()
+      if (!tracking) return
+      tracking = false
+      if (panned) return // that was a pan, not a page turn
+      const dx = (e.changedTouches[0]?.clientX ?? startX) - startX
+      const dy = (e.changedTouches[0]?.clientY ?? startY) - startY
+      if (Math.abs(dx) <= TAP_SLOP && Math.abs(dy) <= TAP_SLOP) {
+        turn(dir)
+      } else if (Math.abs(dx) >= SWIPE_TH && Math.abs(dx) > Math.abs(dy)) {
+        turn(dx < 0 ? 'next' : 'prev')
+      }
+      // Anything else (a vertical or ambiguous drag) turns nothing.
+    },
+    { passive: true }
+  )
+}
+
+// True when the content is larger than its container, i.e. a zoomed-in PDF or
+// comic page that can be panned. EPUB text never scrolls here (epub.js
+// paginates into the box), so it always reads false.
+function isPannable(root: HTMLElement): boolean {
+  return root.scrollWidth > root.clientWidth + 1 || root.scrollHeight > root.clientHeight + 1
 }
 
 // Exposed to the Furlough Android app over the WebView JS bridge. The app calls

@@ -208,13 +208,9 @@ export class EpubReader implements Reader {
       doc.addEventListener('keyup', handleKey as any)
     })
 
-    // Click on right/left edge of the viewport navigates pages.
-    root.addEventListener('click', (e) => {
-      const rect = root.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      if (x < rect.width * 0.2) this.prev()
-      else if (x > rect.width * 0.8) this.next()
-    })
+    // No click-to-turn inside the text column: the full-height page-turn zones
+    // down each edge (reader.html / index.ts) sit OUTSIDE it now, so a tap on
+    // the text is a tap on the text.
   }
 
   next(): void {
