@@ -6,10 +6,12 @@
   --accent: #d4a64b;
   --border: #2a2d34;
   --reader-bar-h: 44px;
-  /* Horizontal strip reserved for the page-turn buttons (above or below the
-     text, user's choice via the ⇅ toggle — html gets .nav-top/.nav-bottom).
-     The text column keeps its full width and never runs under the buttons. */
-  --nav-strip-h: 56px;
+  /* Width of the page-turn zone down each side of the screen. Full-height, so
+     a page turn is always under the thumb — no reaching for the top or bottom
+     of a tablet. The text column is inset by this much on both sides, so words
+     never sit under a zone; PDF/comic pages keep the full width and the zones
+     float over them (see .pdf-mode below). */
+  --nav-zone-w: clamp(44px, 11vw, 88px);
 }
 
 * { box-sizing: border-box; }
@@ -42,29 +44,29 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   left: 50%;
   transform: translateX(-50%);
   bottom: 0;
-  width: 100%;
+  /* Inset by a nav zone on each side: epub.js paginates into what's left, so
+     the text is never under a zone and stays selectable edge to edge. */
+  width: calc(100% - 2 * var(--nav-zone-w));
   max-width: 900px;     /* readable column on wide screens */
   background: var(--bg);
 }
 
-/* Reserve the nav strip on the chosen edge so content (EPUB text, PDF canvas,
-   comic page) never sits under the page-turn buttons. The class is applied to
-   <html> pre-paint (inline script in reader.html), so epub.js paginates at
-   the final size from the start. */
-.nav-top #reader-root { top: calc(var(--reader-bar-h) + var(--nav-strip-h)); }
-.nav-bottom #reader-root { bottom: var(--nav-strip-h); }
-
+/* Full-height page-turn buttons: the WHOLE side of the screen is the button,
+   not a control floating in the middle of it. Each is a faint full-height
+   panel with a hairline on its inner edge, so the tappable area is obvious at
+   a glance and the thumb turns a page wherever it happens to be resting. The
+   tint is neutral grey at low alpha so it reads on both the dark EPUB page and
+   the white PDF/comic page it floats over. */
 .reader-nav {
   position: fixed;
-  /* 64px keeps corner buttons clear of Furlough's bottom-center mini-player
-     on ~412dp phones if a user explicitly picks the bottom strip in-app. */
-  width: 64px;
-  height: 40px;
-  background: rgba(20, 22, 27, 0.85);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 1.7rem;
+  top: var(--reader-bar-h);
+  bottom: 0;
+  width: var(--nav-zone-w);
+  background: rgba(128, 132, 140, 0.1);
+  color: var(--fg-dim);
+  border: none;
+  padding: 0;
+  font-size: 2.2rem;
   line-height: 1;
   font-family: ui-sans-serif, system-ui, sans-serif;
   cursor: pointer;
@@ -72,25 +74,26 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
   align-items: center;
   justify-content: center;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* The zone owns its gestures (tap / swipe / drag-to-pan in reader.js); no
+     browser scrolling, double-tap zoom or overscroll from inside it. */
+  touch-action: none;
   z-index: 11;
-  transition: opacity 0.2s ease, background 0.2s ease;
-  opacity: 0.7;
-  padding: 0 0 4px 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: background 0.2s ease, color 0.2s ease;
 }
+/* The chevron just marks which way the side goes; the panel is the button. */
+.reader-nav > span { pointer-events: none; padding-bottom: 4px; }
 .reader-nav:hover,
 .reader-nav:focus-visible {
-  opacity: 1;
-  background: rgba(212, 166, 75, 0.18);
+  background: rgba(212, 166, 75, 0.16);
   color: var(--accent);
   outline: none;
 }
-.reader-nav:active { transform: scale(0.95); }
-.reader-nav-prev { left: 14px; }
-.reader-nav-next { right: 14px; }
-/* Centered in the reserved strip on whichever edge is active. */
-.nav-top .reader-nav { top: calc(var(--reader-bar-h) + (var(--nav-strip-h) - 40px) / 2); }
-.nav-bottom .reader-nav { bottom: calc((var(--nav-strip-h) - 40px) / 2); }
+.reader-nav:active { background: rgba(212, 166, 75, 0.26); color: var(--accent); }
+/* Hairline on the inner edge only — draws the boundary between "page" and
+   "turn the page" without boxing in the screen. */
+.reader-nav-prev { left: 0; border-right: 1px solid rgba(128, 132, 140, 0.3); }
+.reader-nav-next { right: 0; border-left: 1px solid rgba(128, 132, 140, 0.3); }
 
 #toc-panel {
   position: fixed; top: var(--reader-bar-h); right: 0; bottom: 0;
@@ -150,7 +153,10 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 @keyframes reader-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* PDF mode: canvas-based. At fit-zoom the page is centered; when zoomed in it
-   overflows and can be panned (margin:auto centers, overflow:auto scrolls). */
+   overflows and can be panned (margin:auto centers, overflow:auto scrolls).
+   Unlike the EPUB column these keep the FULL viewport width — insetting them
+   by two nav zones would shrink the page by a fifth on a phone — so the zones
+   float over their outer edges instead. */
 #reader-root.pdf-mode {
   max-width: none;
   width: 100%;
@@ -197,11 +203,6 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 }
 .pdf-zoom:hover {
   opacity: 1;
-}
-/* Keep the zoom pill clear of the bottom nav strip when that's where the
-   page buttons live. */
-.nav-bottom .pdf-zoom {
-  bottom: calc(var(--nav-strip-h) + 12px);
 }
 .pdf-zoom button {
   background: transparent;

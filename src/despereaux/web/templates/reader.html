@@ -6,25 +6,6 @@
     <meta name="color-scheme" content="dark light" />
     <title>{{ book.title }} — despereaux</title>
     <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
-    <script>
-      // Apply the persisted page-button position (top/bottom strip) before first
-      // paint so the layout doesn't flash. Written by the ⇅ toggle in reader.js.
-      (function () {
-        var pos = 'bottom';
-        try {
-          var stored = localStorage.getItem('despereaux:navPos');
-          if (stored === 'top' || stored === 'bottom') {
-            pos = stored;
-          } else if (typeof FurloughNative !== 'undefined') {
-            // Inside the Furlough WebView (its JS bridge is injected before
-            // load): default to the TOP strip — the app draws its own Listen
-            // pill bottom-center, which would collide with bottom buttons.
-            pos = 'top';
-          }
-        } catch (e) {}
-        document.documentElement.classList.add('nav-' + pos);
-      })();
-    </script>
     <link rel="stylesheet" href="/static/reader/assets/reader.css?v={{ asset_version }}" />
     <script>
       window.DESPEREAUX_BOOK = {
@@ -42,8 +23,6 @@
     <header class="reader-bar">
       <a class="back" href="/book/{{ book.id }}" title="Back to details">←</a>
       <div class="title">{{ book.title }}</div>
-      <button id="nav-pos-toggle" aria-label="Move page buttons to the other edge"
-              title="Move the page-turn buttons to the top or bottom">⇅</button>
       <button id="toc-toggle" aria-label="Table of contents">☰</button>
     </header>
     <div id="reader-root"></div>
@@ -51,8 +30,12 @@
       <div class="reader-spinner" aria-hidden="true"></div>
       <p>Loading…</p>
     </div>
-    <button id="reader-prev" class="reader-nav reader-nav-prev" aria-label="Previous page" title="Previous (← key, swipe right)">‹</button>
-    <button id="reader-next" class="reader-nav reader-nav-next" aria-label="Next page" title="Next (→ key, space, swipe left)">›</button>
+    <!-- Page-turn zones: full-height strips down the left and right edges, so a
+         page turn is always under the thumb however the device is held. Real
+         <button>s (keyboard + screen reader); reader.js adds tap/swipe/pan
+         handling on top for touch. -->
+    <button id="reader-prev" class="reader-nav reader-nav-prev" aria-label="Previous page" title="Previous (← key, tap the left edge, swipe right)"><span aria-hidden="true">‹</span></button>
+    <button id="reader-next" class="reader-nav reader-nav-next" aria-label="Next page" title="Next (→ key, space, tap the right edge, swipe left)"><span aria-hidden="true">›</span></button>
     <aside id="toc-panel" hidden></aside>
     <script type="module" src="/static/reader/assets/reader.js?v={{ asset_version }}"></script>
   </body>

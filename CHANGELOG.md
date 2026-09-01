@@ -118,21 +118,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the device fleet clears Chromium 125. The Playwright PDF check now also
   turns pages (same-canvas re-render, the pattern majors break) and asserts
   relative page movement so the saved-position restore can't skew it.
-- **Page-turn buttons no longer cover the text — and you choose where they
-  live**: the floating prev/next buttons used to sit on top of the text
-  column's edges on anything narrower than ~1040px (tablets, phones, the
-  Furlough WebView). They now dock in a reserved horizontal strip **below the
-  text (default) or above it** — a ⇅ toggle in the reader bar flips the
-  position, persisted per device (localStorage). Inside the Furlough WebView
-  the default is **top**, so the app's bottom-center Listen pill never
-  collides with the buttons. The text keeps its full
-  column width in every mode (this supersedes the interim side-gutter
-  approach that narrowed the column), and the content area reflows around the
-  strip for EPUB, PDF, and comics alike; the PDF zoom pill lifts clear of a
-  bottom strip. Furlough inherits everything, since it renders this same
-  reader page. Guarded by Playwright regression tests: zero button/text
-  overlap at phone width with a full-width column, plus toggle + reload
-  persistence at tablet width. `app.css` is now cache-busted with a
+- **Page turns are now the full sides of the screen**: prev/next are
+  full-height panels down the left and right edges, from under the reader bar
+  to the bottom of the viewport — the whole side of the screen is the button,
+  not a control floating in the middle of it, so the thumb turns a page
+  wherever it happens to be holding the tablet or phone. They are still real `<button>`s (keyboard, screen readers), and on
+  touch they behave like the content underneath: a tap turns the page, a
+  horizontal swipe turns it in the swipe's direction, and a drag while a PDF
+  or comic is zoomed in pans the page instead of turning it. The EPUB text
+  column is inset between the zones so no word ever sits under one and text
+  stays selectable; PDF and comic pages keep the full viewport width with the
+  zones floating over their outer edges. This supersedes both earlier attempts
+  at the problem — the side gutters that narrowed the column, then the
+  reserved top/bottom strip — and the **⇅ strip toggle is removed** along with
+  its `despereaux:navPos` preference, since there is no longer a strip to
+  move. Also gone: EPUB's click-the-inner-20%-of-the-column page turn, which
+  used to fire on a tap meant for the text. Furlough inherits all of it (same
+  reader page) and needs no app-side change: its bottom-center Listen pill no
+  longer has buttons to collide with. Guarded by rewritten Playwright
+  regression tests — zones flush to both edges, spanning bar-to-bottom, never
+  overlapping the text, at phone and tablet widths.
+- **`app.css` is now cache-busted** with a
   content-hash `?v=` (the reader bundle already did this), so a new release no
   longer leaves browsers on a heuristically-fresh *old* stylesheet — which is
   what made the new On-deck shelf render unstyled (over-large covers, mislaid
