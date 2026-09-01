@@ -145,6 +145,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   progress bar) until a hard refresh. Exposed via a `static_version()` Jinja
   global; applied to the three templates that link `app.css` (base/login/setup).
   Also centers the On-deck no-cover placeholder glyph.
+- **Dependencies refreshed again to latest** (August 2026) alongside that
+  change: frontend on **TypeScript 7** and Vite 8.2.2 (`@xmldom/xmldom`
+  override 0.9.12); Python lock upgraded across the board — fastapi 0.141.1,
+  starlette 1.6.0, uvicorn 0.52.4, sqlalchemy 2.0.52, pydantic-settings 2.15,
+  pypdf 6.16.2, pypdfium2 5.13, rarfile 4.5, ruff 0.16.4, playwright 1.62;
+  CI actions on `astral-sh/setup-uv@v10.0.1` and `actions/setup-node@v7`.
+  **pdfjs-dist deliberately stays on v5** (legacy build, Chrome 110 floor) —
+  the dependabot ignore rule and the reason behind it are unchanged.
 
 ## [0.4.0] — 2026-06-11
 
