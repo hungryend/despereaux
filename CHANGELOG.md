@@ -74,6 +74,32 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   3.13) and the container smoke + browser tier in CI.
 
 ### Fixed
+- **Scanned PDFs no longer open as blank white pages.** Any book whose pages
+  are JPEG 2000 images (`/JPXDecode` — the output of most book scanners, and
+  what every scanned codex in the library uses) rendered as an empty page: the
+  page count, outline and even the invisible OCR text layer were all there, but
+  nothing was drawn. PDF.js 5 decodes JPX in a WebAssembly OpenJPEG module that
+  it fetches at runtime from the URL given by the `wasmUrl` API parameter —
+  which the reader never set, so the decoder failed to initialise. It is a
+  *warning*, not an error, so the reader's error overlay stayed silent and the
+  page just looked empty. Same story for JBIG2 (the other scanner format),
+  character maps, the standard-14 font data and ICC profiles: all four are
+  package data PDF.js loads by URL rather than importing, so Vite never saw
+  them and none were in the bundle. They are now emitted by a copy plugin in
+  `vite.config.ts` into a **version-scoped** `assets/pdfjs-<version>/`
+  directory — these files must keep their exact names (PDF.js concatenates
+  `${wasmUrl}openjpeg.wasm`), so a content hash is impossible and the version
+  in the path is what stops an `immutable`-cached copy from ever meeting a
+  mismatched reader build, the same trap as the stale worker in #63. The reader
+  passes all four URLs to `getDocument()`.
+  Two regression nets, because nothing existing could have caught this: a new
+  `sample-jpx.pdf` fixture (one JPEG 2000 page — the shape a scanned book has;
+  `sample.pdf` is three *blank* vector pages, so "the reader drew nothing" was
+  indistinguishable from success), and a browser check that asserts **opaque,
+  non-white pixels** actually landed on the canvas and that PDF.js logged no
+  decode failure. The asset smoke test also fetches `openjpeg.wasm` and one
+  file from each data directory. Verified both ways: the new check fails on the
+  old code with the exact console warning, and passes on the fix.
 - **Unblocked the GHCR publish gate by dropping pip from the runtime image.**
   Trivy parses `pip/_vendor/vendor.txt` as an installed-package list, so pip's
   vendored pins (`msgpack==1.1.2`, `setuptools==70.3.0`) were reported as

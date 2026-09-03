@@ -14,6 +14,16 @@ import type { BookBootstrap, Reader, TocItem } from './types'
 // Wire the worker via Vite's ?url import.
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
+// Base URL for the package data PDF.js fetches at runtime instead of importing
+// (see the copy plugin in vite.config.ts, which emits it under this same
+// version-scoped directory). Every one of these has to be handed to
+// getDocument() explicitly: unset, PDF.js only WARNS and renders what it can.
+// That is how a JPEG 2000 scan came out as blank white pages — OpenJPEG lives
+// in wasm/ now, `wasmUrl` was never set, and the failure never reached the
+// error overlay.
+declare const __PDFJS_DATA_DIR__: string
+const DATA_BASE = `${import.meta.env.BASE_URL}${__PDFJS_DATA_DIR__}`
+
 // Save progress when the page index moves at least this much (avoids
 // upserting on every scroll/render tick).
 const SAVE_PAGE_DELTA = 1
@@ -69,6 +79,14 @@ export class PdfReader implements Reader {
     this.loadingTask = pdfjsLib.getDocument({
       url: this.bootstrap.fileUrl,
       withCredentials: true,
+      // Runtime package data. wasmUrl covers the OpenJPEG (JPEG 2000) and
+      // JBIG2 decoders — the scanned-page formats; the rest keep text correct
+      // in PDFs that don't embed their fonts or use CJK/ICC resources.
+      wasmUrl: `${DATA_BASE}wasm/`,
+      cMapUrl: `${DATA_BASE}cmaps/`,
+      cMapPacked: true,
+      standardFontDataUrl: `${DATA_BASE}standard_fonts/`,
+      iccUrl: `${DATA_BASE}iccs/`,
       // Range requests + streaming so opening a 200MB book doesn't download
       // the whole thing before showing page 1.
       disableAutoFetch: false,
