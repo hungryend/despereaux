@@ -12,6 +12,7 @@ Gated by DESPEREAUX_SMOKE_URL + DESPEREAUX_SMOKE_BROWSER=1. Requires browsers:
 from __future__ import annotations
 
 import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.smoke.conftest import SMOKE_URL, requires_browser, requires_smoke
 
@@ -145,6 +146,60 @@ def test_nav_zones_are_full_side_edges_on_tablet(reader_page, smoke) -> None:
     assert not _overlaps(next_btn, content), f"next zone overlaps text: {next_btn} vs {content}"
     assert page.locator("#nav-pos-toggle").count() == 0, "the strip toggle should be gone"
     assert not errors, f"reader console errors: {errors}"
+
+
+def test_jpeg2000_pdf_actually_paints(reader_page, smoke) -> None:
+    """Regression: a scanned (JPEG 2000) page rendered as a blank WHITE page.
+
+    PDF.js 5 decodes JPX in a WebAssembly OpenJPEG module it fetches from the
+    `wasmUrl` API parameter. That parameter was never set, so the decoder never
+    loaded — and PDF.js only WARNS ("OpenJPEG failed to initialize"), so the
+    canvas came up blank, the error overlay stayed silent, and every existing
+    check passed: sample.pdf is three BLANK vector pages, so "the reader painted
+    nothing at all" was indistinguishable from success.
+
+    This asserts real ink on the canvas, and that PDF.js logged no decode
+    failure while producing it.
+    """
+    page, errors = reader_page
+    warnings: list[str] = []
+    page.on(
+        "console",
+        lambda m: warnings.append(m.text) if m.type in ("warning", "error") else None,
+    )
+    book = smoke.wait_for_book("Smoke JPX Sample", fmt="pdf")
+
+    page.goto(f"{SMOKE_URL}/read/{book['id']}")
+    page.wait_for_selector("#reader-root canvas", timeout=RENDER_TIMEOUT_MS)
+
+    # Poll the pixels rather than sleeping: the canvas element exists before the
+    # image finishes decoding, so a one-shot read would race the decoder.
+    # OPAQUE and non-white. The alpha test matters: a canvas that has not been
+    # painted yet is transparent black (0,0,0,0), which reads as "dark ink" and
+    # makes this check pass against a reader that draws nothing at all.
+    ink = """() => {
+      const c = document.querySelector('#reader-root canvas');
+      if (!c || !c.width) return false;
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      for (let i = 0; i < d.length; i += 4 * 37) {
+        if (d[i + 3] < 200) continue;
+        if (d[i] < 200 || d[i + 1] < 200 || d[i + 2] < 200) return true;
+      }
+      return false;
+    }"""
+    try:
+        page.wait_for_function(ink, timeout=RENDER_TIMEOUT_MS)
+    except PlaywrightTimeoutError:
+        pytest.fail(
+            "JPEG 2000 page rendered blank — PDF.js decoded no image. "
+            f"console: {warnings or '(silent, as in the original bug)'}"
+        )
+
+    decode_failures = [
+        w for w in warnings if "OpenJPEG" in w or "Unable to decode image" in w or "wasmUrl" in w
+    ]
+    assert not decode_failures, f"PDF.js could not load its decoders: {decode_failures}"
+    assert not errors, f"reader console errors on JPX open: {errors}"
 
 
 def test_pdf_renders_in_reader(reader_page, smoke) -> None:

@@ -109,6 +109,24 @@ def test_reader_static_assets(smoke) -> None:
     assert worker.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert len(worker.content) > 100_000  # a real worker bundle, not an error page
 
+    # PDF.js fetches its OpenJPEG/JBIG2 decoders, cmaps, standard-14 fonts and
+    # ICC profiles by URL at runtime; they reach the bundle only via the copy
+    # plugin in vite.config.ts. Missing, PDF.js merely WARNS and a scanned
+    # (JPEG 2000) book renders as blank white pages. Discover the version-scoped
+    # directory from reader.js rather than pinning a pdfjs version here.
+    d = re.search(r"assets/pdfjs-[\d.]+/", js.text)
+    assert d, "version-scoped PDF.js data directory not found in reader.js"
+    wasm = smoke.get(f"/static/reader/{d.group(0)}wasm/openjpeg.wasm")
+    assert wasm.status_code == 200, "OpenJPEG wasm missing — JPEG 2000 scans will be blank"
+    assert wasm.content[:4] == bytes([0]) + b"asm", "not a WebAssembly module"
+    for probe in (
+        "wasm/jbig2.wasm",
+        "standard_fonts/LiberationSans-Bold.ttf",
+        "cmaps/Adobe-Japan1-UCS2.bcmap",
+    ):
+        r = smoke.get(f"/static/reader/{d.group(0)}{probe}")
+        assert r.status_code == 200, f"PDF.js data file missing: {probe}"
+
 
 def test_read_page_with_token_cookie(smoke) -> None:
     """/read/{id} via the despereaux_token cookie — the Furlough WebView path."""
