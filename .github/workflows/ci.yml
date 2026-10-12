@@ -26,7 +26,7 @@ jobs:
 
       - name: Install uv
         # setup-uv publishes no reliable floating major tag — pin the exact release.
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -134,7 +134,7 @@ jobs:
 
       - name: Install uv
         # setup-uv publishes no reliable floating major tag — pin the exact release.
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -238,7 +238,7 @@ jobs:
       # CI (the push trigger is filtered to branches: [main]).
       - name: Bump version + create tag
         id: tag
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@v7
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
