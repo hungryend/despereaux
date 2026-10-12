@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from despereaux.db import get_db, session_scope
-from despereaux.middleware.auth import current_user
+from despereaux.middleware.auth import current_user, require_admin
 from despereaux.repos import books as books_repo
 from despereaux.services.metadata_apply import apply_candidate
 from despereaux.services.metadata_lookup import get_candidates_for
@@ -68,7 +68,7 @@ async def list_candidates(
 async def select_match(
     book_id: str,
     body: SelectMatchBody,
-    _user=Depends(current_user),
+    _user=Depends(require_admin),
 ) -> None:
     async with session_scope() as session:
         book = await books_repo.get_book(session, book_id)

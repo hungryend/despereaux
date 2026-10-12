@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from despereaux.config import get_settings
 from despereaux.db import get_db, session_scope
-from despereaux.middleware.auth import current_user
+from despereaux.middleware.auth import current_user, require_admin
 from despereaux.repos import books as books_repo
 from despereaux.repos import conversions as conversions_repo
 from despereaux.repos import progress as progress_repo
@@ -228,7 +228,7 @@ async def edit_metadata(
     book_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    user=Depends(current_user),
+    user=Depends(require_admin),
     refresh: bool = False,
     q: str | None = None,
     a: str | None = None,
@@ -266,7 +266,7 @@ async def attach_picker(
     book_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    user=Depends(current_user),
+    user=Depends(require_admin),
     q: str | None = None,
 ):
     """Picker for selecting a parent book to attach the current book under as
@@ -295,7 +295,7 @@ async def attach_to(
     book_id: str,
     parent_id: str = Form(...),
     asset_label: str = Form(""),
-    _user=Depends(current_user),
+    _user=Depends(require_admin),
 ):
     async with session_scope() as session:
         ok = await books_repo.attach_to_parent(
@@ -310,7 +310,7 @@ async def attach_to(
 
 
 @router.post("/book/{book_id}/detach")
-async def detach_from(book_id: str, _user=Depends(current_user)):
+async def detach_from(book_id: str, _user=Depends(require_admin)):
     async with session_scope() as session:
         await books_repo.detach_from_parent(session, book_id)
     # The detached book is now a top-level book again; show it.
@@ -327,6 +327,9 @@ async def convert_book(
     """No-JS fallback for the Convert-to-EPUB button: queue the job, then land
     back on the detail page (which shows server-rendered status). The header
     notifications menu drives the richer JS progress experience."""
+    # Anyone may convert; re-converting replaces the existing EPUB, so admin only.
+    if force and not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="admin required")
     conv_id: str | None = None
     async with session_scope() as session:
         book = await books_repo.get_book(session, book_id)
@@ -348,7 +351,7 @@ async def convert_book(
 
 
 @router.post("/book/{book_id}/convert/delete")
-async def delete_conversion(book_id: str, _user=Depends(current_user)):
+async def delete_conversion(book_id: str, _user=Depends(require_admin)):
     """Remove the converted EPUB version: delete the export file, clear the
     primary-EPUB pointer, and drop the conversion rows. The ORIGINAL file is
     untouched; the book reverts to reading its source format and the Convert
@@ -368,7 +371,7 @@ async def delete_conversion(book_id: str, _user=Depends(current_user)):
 
 
 @router.post("/book/{book_id}/delete")
-async def delete_book(book_id: str, _user=Depends(current_user)):
+async def delete_book(book_id: str, _user=Depends(require_admin)):
     """Remove a book from the library (DB row only — the file on disk stays).
     Useful for pruning duplicates. The next /api/admin/scan would re-ingest
     the file if it's still in a configured library path; to permanently
@@ -409,7 +412,7 @@ async def finish_progress(
 
 
 @router.post("/book/{book_id}/metadata/refresh")
-async def refresh_metadata(book_id: str, _user=Depends(current_user)):
+async def refresh_metadata(book_id: str, _user=Depends(require_admin)):
     # Re-render the picker with a fresh fetch from the APIs.
     return RedirectResponse(url=f"/book/{book_id}/metadata?refresh=true", status_code=303)
 
@@ -423,7 +426,7 @@ async def select_metadata(
     # we can find it again. With manual search the auto-cache won't have it.
     q: str | None = Form(None),
     a: str | None = Form(None),
-    _user=Depends(current_user),
+    _user=Depends(require_admin),
 ):
     async with session_scope() as session:
         book = await books_repo.get_book(session, book_id)

@@ -57,7 +57,10 @@ async def start_conversion(
     user=Depends(current_user),
 ):
     """Queue a high-quality EPUB conversion. Returns the existing job if one is
-    already running (dedup double-clicks). `?force=1` re-converts from scratch."""
+    already running (dedup double-clicks). `?force=1` re-converts from scratch
+    (admin only — it replaces the existing EPUB)."""
+    if force and not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="admin required")
     book = await books_repo.get_book(session, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
