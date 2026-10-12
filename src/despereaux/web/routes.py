@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import math
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlencode
@@ -13,10 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from despereaux.config import get_settings
 from despereaux.db import get_db, session_scope
-from despereaux.middleware.auth import current_user
+from despereaux.middleware.auth import current_user, require_admin
+from despereaux.models import User
 from despereaux.repos import books as books_repo
 from despereaux.repos import conversions as conversions_repo
 from despereaux.repos import progress as progress_repo
+from despereaux.repos import users as users_repo
 from despereaux.repos.book_delete import delete_by_id
 from despereaux.services import epub_export
 from despereaux.services.converter import calibre_available
@@ -113,6 +116,43 @@ def _group_by_author(books: list) -> list[dict]:
     return [{"author": name, "books": items} for (_key, name), items in sorted(groups.items())]
 
 
+def _title_key(name: str) -> str:
+    """Case-insensitive ordering key that ignores a leading article, so "The
+    Expanse" files under E — matching how book sort_titles are derived."""
+    lowered = name.strip().lower()
+    for article in ("the ", "a ", "an "):
+        if lowered.startswith(article):
+            return lowered[len(article) :]
+    return lowered
+
+
+def _reading_order(book) -> tuple:
+    return (book.series_index is None, book.series_index or 0.0, book.sort_title.lower())
+
+
+def _group_by_series(books: list) -> list[dict]:
+    """Tiles for the "By series" library view. Books sharing a series with at
+    least one other book in the result collapse into a single stack tile
+    ({"series", "books"} in reading order, the first fronting the stack); every
+    other book — standalone, or the only one of its series here — stays a
+    normal tile ({"book"}). Stacks and books are ordered together by name."""
+    members: dict[str, list] = {}
+    for book in books:
+        if book.series_id:
+            members.setdefault(book.series_id, []).append(book)
+    keyed: list[tuple[str, dict]] = []
+    for book in books:
+        group = members.get(book.series_id) if book.series_id else None
+        if group and len(group) > 1:
+            if group[0] is book:  # emit each stack once, at its first member
+                stack = {"series": book.series, "books": sorted(group, key=_reading_order)}
+                keyed.append((_title_key(book.series.name), stack))
+        else:
+            keyed.append((book.sort_title.lower(), {"book": book}))
+    keyed.sort(key=lambda kv: kv[0])
+    return [tile for _key, tile in keyed]
+
+
 router = APIRouter(include_in_schema=False)
 
 # A book merely opened to its first page (≈0% saved progress) is part of the
@@ -120,6 +160,8 @@ router = APIRouter(include_in_schema=False)
 # reader is meaningfully past the start. ~1% ≈ a few pages into a normal book;
 # it also absorbs the small non-zero percent EPUB.js reports on the opening page.
 ON_DECK_MIN_PERCENT = 0.01
+
+LIBRARY_SORTS = ("title", "author", "series", "added")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -129,10 +171,18 @@ async def library(
     user=Depends(current_user),
     search: str | None = None,
     library: str | None = None,
-    sort: str = "title",
+    sort: str | None = None,
 ):
-    if sort not in {"title", "author", "added"}:
-        sort = "title"
+    # Each profile keeps its own view: picking a sort remembers it, and a plain
+    # visit to the library reopens the last one picked ("title" until then).
+    db_user = await session.get(User, user["id"])
+    if sort in LIBRARY_SORTS:
+        if db_user is not None and db_user.library_sort != sort:
+            async with session_scope() as write:
+                await users_repo.set_library_sort(write, user["id"], sort)
+    else:
+        saved = db_user.library_sort if db_user is not None else None
+        sort = saved if saved in LIBRARY_SORTS else "title"
     settings = get_settings()
     books = await books_repo.list_books(
         session,
@@ -157,8 +207,10 @@ async def library(
             :24
         ]
         on_deck = await books_repo.get_books_by_ids(session, recent_ids)
-    # "By author" lists one book under each of its authors; other sorts stay flat.
+    # "By author" lists one book under each of its authors; "By series" stacks
+    # each series into one tile; other sorts stay flat.
     author_groups = _group_by_author(books) if sort == "author" else None
+    series_tiles = _group_by_series(books) if sort == "series" else None
     # Query suffix carrying the active library/search filter onto the sort links.
     filter_params = {k: v for k, v in (("library", library), ("search", search)) if v}
     filter_qs = ("&" + urlencode(filter_params)) if filter_params else ""
@@ -179,7 +231,38 @@ async def library(
             "current_library": library,
             "sort": sort,
             "author_groups": author_groups,
+            "series_tiles": series_tiles,
             "filter_qs": filter_qs,
+        },
+    )
+
+
+@router.get("/series/{series_id}", response_class=HTMLResponse)
+async def series_detail(
+    series_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(current_user),
+):
+    series = await books_repo.get_series(session, series_id)
+    if not series:
+        raise HTTPException(status_code=404, detail="series not found")
+    books = await books_repo.list_books_in_series(session, series_id)
+    prog_rows = await progress_repo.list_progress_for_user(session, user_id=user["id"])
+    authors: list[str] = []
+    for book in books:
+        for ba in book.authors or []:
+            if ba.author.name not in authors:
+                authors.append(ba.author.name)
+    return templates.TemplateResponse(
+        request,
+        "series.html",
+        {
+            "user": user,
+            "series": series,
+            "books": books,
+            "authors": authors,
+            "progress_map": {p.book_id: p.percent for p in prog_rows},
         },
     )
 
@@ -201,6 +284,7 @@ async def book_detail(
         await books_repo.get_book(session, book.parent_book_id) if book.parent_book_id else None
     )
     conversion = await conversions_repo.get_latest_for_book(session, book.id)
+    series_names = await books_repo.list_series_names(session) if user["is_admin"] else []
     resp = templates.TemplateResponse(
         request,
         "book.html",
@@ -216,6 +300,7 @@ async def book_detail(
             "parent": parent,
             "conversion": conversion,
             "can_convert": epub_export.can_convert(book.format),
+            "series_names": series_names,
         },
     )
     # Conversion state changes out-of-band — keep the action buttons fresh.
@@ -228,7 +313,7 @@ async def edit_metadata(
     book_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    user=Depends(current_user),
+    user=Depends(require_admin),
     refresh: bool = False,
     q: str | None = None,
     a: str | None = None,
@@ -266,7 +351,7 @@ async def attach_picker(
     book_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db),
-    user=Depends(current_user),
+    user=Depends(require_admin),
     q: str | None = None,
 ):
     """Picker for selecting a parent book to attach the current book under as
@@ -290,12 +375,37 @@ async def attach_picker(
     )
 
 
+@router.post("/book/{book_id}/series")
+async def set_book_series(
+    book_id: str,
+    series_name: str = Form(""),
+    series_index: str = Form(""),
+    _user=Depends(require_admin),
+):
+    """Set (or, with a blank name, clear) a book's series by hand — most files
+    carry no series metadata, and the "By series" view groups on it."""
+    index: float | None = None
+    if series_index.strip():
+        try:
+            index = float(series_index)
+        except ValueError:
+            index = -1.0
+        if not math.isfinite(index) or index < 0:
+            raise HTTPException(status_code=400, detail="series number must be 0 or more")
+    async with session_scope() as session:
+        book = await books_repo.get_book(session, book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="book not found")
+        await books_repo.set_series(session, book, series_name, index)
+    return RedirectResponse(url=f"/book/{book_id}", status_code=303)
+
+
 @router.post("/book/{book_id}/attach")
 async def attach_to(
     book_id: str,
     parent_id: str = Form(...),
     asset_label: str = Form(""),
-    _user=Depends(current_user),
+    _user=Depends(require_admin),
 ):
     async with session_scope() as session:
         ok = await books_repo.attach_to_parent(
@@ -310,7 +420,7 @@ async def attach_to(
 
 
 @router.post("/book/{book_id}/detach")
-async def detach_from(book_id: str, _user=Depends(current_user)):
+async def detach_from(book_id: str, _user=Depends(require_admin)):
     async with session_scope() as session:
         await books_repo.detach_from_parent(session, book_id)
     # The detached book is now a top-level book again; show it.
@@ -327,6 +437,9 @@ async def convert_book(
     """No-JS fallback for the Convert-to-EPUB button: queue the job, then land
     back on the detail page (which shows server-rendered status). The header
     notifications menu drives the richer JS progress experience."""
+    # Anyone may convert; re-converting replaces the existing EPUB, so admin only.
+    if force and not user["is_admin"]:
+        raise HTTPException(status_code=403, detail="admin required")
     conv_id: str | None = None
     async with session_scope() as session:
         book = await books_repo.get_book(session, book_id)
@@ -348,7 +461,7 @@ async def convert_book(
 
 
 @router.post("/book/{book_id}/convert/delete")
-async def delete_conversion(book_id: str, _user=Depends(current_user)):
+async def delete_conversion(book_id: str, _user=Depends(require_admin)):
     """Remove the converted EPUB version: delete the export file, clear the
     primary-EPUB pointer, and drop the conversion rows. The ORIGINAL file is
     untouched; the book reverts to reading its source format and the Convert
@@ -368,7 +481,7 @@ async def delete_conversion(book_id: str, _user=Depends(current_user)):
 
 
 @router.post("/book/{book_id}/delete")
-async def delete_book(book_id: str, _user=Depends(current_user)):
+async def delete_book(book_id: str, _user=Depends(require_admin)):
     """Remove a book from the library (DB row only — the file on disk stays).
     Useful for pruning duplicates. The next /api/admin/scan would re-ingest
     the file if it's still in a configured library path; to permanently
@@ -409,7 +522,7 @@ async def finish_progress(
 
 
 @router.post("/book/{book_id}/metadata/refresh")
-async def refresh_metadata(book_id: str, _user=Depends(current_user)):
+async def refresh_metadata(book_id: str, _user=Depends(require_admin)):
     # Re-render the picker with a fresh fetch from the APIs.
     return RedirectResponse(url=f"/book/{book_id}/metadata?refresh=true", status_code=303)
 
@@ -423,7 +536,7 @@ async def select_metadata(
     # we can find it again. With manual search the auto-cache won't have it.
     q: str | None = Form(None),
     a: str | None = Form(None),
-    _user=Depends(current_user),
+    _user=Depends(require_admin),
 ):
     async with session_scope() as session:
         book = await books_repo.get_book(session, book_id)

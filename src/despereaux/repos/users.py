@@ -70,3 +70,10 @@ async def get_or_create_user(
     user.last_seen_at = now
     await session.flush()
     return user
+
+
+async def set_library_sort(session: AsyncSession, user_id: str, sort: str) -> None:
+    """Remember the library view a profile last picked."""
+    user = await session.get(User, user_id)
+    if user is not None:
+        user.library_sort = sort

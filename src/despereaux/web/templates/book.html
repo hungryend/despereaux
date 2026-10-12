@@ -32,6 +32,7 @@
           {% if conversion and conversion.toc_count is not none %}
             <div class="convert-meta">TOC: {{ conversion.toc_count }} entries{% if conversion.toc_source %} ({{ conversion.toc_source }}){% endif %}{% if conversion.image_count is not none %} · Images: {{ conversion.image_count }}{% endif %}</div>
           {% endif %}
+          {% if user.is_admin %}
           <form method="post" action="/book/{{ book.id }}/convert?force=1" class="inline-form"
                 onsubmit="if(window.Notification&amp;&amp;Notification.permission==='default')Notification.requestPermission();return confirm('Re-build the EPUB from scratch? This replaces the current converted version.');">
             <button type="submit" class="btn btn-ghost btn-small">Re-convert</button>
@@ -40,6 +41,7 @@
                 onsubmit="return confirm('Remove the converted EPUB version? The original file is untouched and you can convert again later.');">
             <button type="submit" class="btn btn-danger btn-small">Remove EPUB version</button>
           </form>
+          {% endif %}
         {% else %}
           {% if st == 'failed' and conversion %}
             <div class="convert-error">Conversion failed: {{ conversion.error or 'unknown error' }}</div>
@@ -51,6 +53,7 @@
         {% endif %}
       {% endif %}
 
+      {% if user.is_admin %}
       <a class="btn" href="/book/{{ book.id }}/metadata">Edit metadata</a>
       {% if not parent %}
         <a class="btn" href="/book/{{ book.id }}/attach">Attach as asset of…</a>
@@ -59,6 +62,7 @@
             onsubmit="return confirm('Remove this entry from the library? The file at {{ book.file_path }} stays on disk; remove or move the file too if you don\'t want it re-ingested on next scan.');">
         <button type="submit" class="btn btn-danger">Remove from library</button>
       </form>
+      {% endif %}
     </div>
   </div>
   <div class="info-col">
@@ -66,14 +70,31 @@
       <div class="parent-link">
         Asset of <a href="/book/{{ parent.id }}">{{ parent.title }}</a>
         {% if book.asset_label %}<span class="asset-label">{{ book.asset_label }}</span>{% endif %}
+        {% if user.is_admin %}
         <form method="post" action="/book/{{ book.id }}/detach" class="inline-form">
           <button type="submit" class="btn-link">Detach</button>
         </form>
+        {% endif %}
       </div>
     {% endif %}
     <h1>{{ book.title }}</h1>
     {% if authors %}<div class="authors">{{ authors|join(', ') }}</div>{% endif %}
-    {% if book.series %}<div class="series">Series: {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}</div>{% endif %}
+    {% if book.series %}<div class="series">Series: <a href="/series/{{ book.series.id }}">{{ book.series.name }}</a>{% if book.series_index is not none %} #{{ '%g' % book.series_index }}{% endif %}</div>{% endif %}
+    {% if user.is_admin %}
+      <details class="series-edit">
+        <summary>{% if book.series %}Change series{% else %}Set series{% endif %}</summary>
+        <form method="post" action="/book/{{ book.id }}/series" class="series-form">
+          <input type="text" name="series_name" list="series-names" placeholder="Series name (blank removes it)"
+                 value="{{ book.series.name if book.series else '' }}" aria-label="Series name" />
+          <input type="number" name="series_index" step="any" min="0" placeholder="#"
+                 value="{{ ('%g' % book.series_index) if book.series_index is not none else '' }}" aria-label="Number in series" />
+          <button type="submit" class="btn btn-small">Save</button>
+          <datalist id="series-names">
+            {% for name in series_names %}<option value="{{ name }}"></option>{% endfor %}
+          </datalist>
+        </form>
+      </details>
+    {% endif %}
     <div class="progress-line">
       {% if finished %}
         Finished — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}
@@ -129,9 +150,11 @@
               <div class="asset-actions">
                 <a class="btn btn-small btn-primary" href="/read/{{ c.id }}">Read</a>
                 <a class="btn btn-small" href="/api/books/{{ c.id }}/download">Download</a>
+                {% if user.is_admin %}
                 <form method="post" action="/book/{{ c.id }}/detach" class="inline-form">
                   <button type="submit" class="btn btn-small btn-ghost">Detach</button>
                 </form>
+                {% endif %}
               </div>
             </li>
           {% endfor %}
@@ -155,7 +178,7 @@
             </li>
           {% endfor %}
         </ul>
-        <p class="hint">Visit any duplicate to remove it from the library.</p>
+        {% if user.is_admin %}<p class="hint">Visit any duplicate to remove it from the library.</p>{% endif %}
       </div>
     {% endif %}
   </div>
