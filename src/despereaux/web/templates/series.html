@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_macros.html" import book_card %}
+{% block title %}{{ series.name }} — despereaux{% endblock %}
+{% block content %}
+<div class="library series-page">
+  <a class="back-link" href="/">← Library</a>
+  <h1 class="series-head">{{ series.name }}<span class="count">{{ books|length }}</span></h1>
+  {% if authors %}<div class="series-authors">{{ authors|join(', ') }}</div>{% endif %}
+  {% if books %}
+    <div class="book-grid">
+      {% for book in books %}{{ book_card(book, progress_map, show_series='index') }}{% endfor %}
+    </div>
+  {% else %}
+    <div class="empty"><p>No books in this series.</p></div>
+  {% endif %}
+</div>
+{% endblock %}
