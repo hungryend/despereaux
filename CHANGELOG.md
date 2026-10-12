@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Security
+- **Library-editing actions are now admin-only.** With several people signed in
+  (one profile per Authentik/native login), any of them could previously
+  remove a book, change its metadata, attach/detach assets, or replace/remove
+  its EPUB export. These now require an admin (`DESPEREAUX_ADMIN_GROUP` member
+  in authentik mode, or a native admin) and the buttons are hidden for everyone
+  else. Reading, progress, Mark as read/unread, downloads and a first
+  Convert-to-EPUB stay open to every profile; `?force=1` re-conversion is
+  admin-only on both the web form and `POST /api/books/{id}/convert`.
+
 ### Added
 - **Regression suite** ahead of the full dependency refresh, in three tiers.
   In-repo: ~70 new tests covering the previously untested read path
