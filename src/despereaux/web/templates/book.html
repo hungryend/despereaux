@@ -79,7 +79,22 @@
     {% endif %}
     <h1>{{ book.title }}</h1>
     {% if authors %}<div class="authors">{{ authors|join(', ') }}</div>{% endif %}
-    {% if book.series %}<div class="series">Series: {{ book.series.name }}{% if book.series_index %} #{{ book.series_index }}{% endif %}</div>{% endif %}
+    {% if book.series %}<div class="series">Series: <a href="/series/{{ book.series.id }}">{{ book.series.name }}</a>{% if book.series_index is not none %} #{{ '%g' % book.series_index }}{% endif %}</div>{% endif %}
+    {% if user.is_admin %}
+      <details class="series-edit">
+        <summary>{% if book.series %}Change series{% else %}Set series{% endif %}</summary>
+        <form method="post" action="/book/{{ book.id }}/series" class="series-form">
+          <input type="text" name="series_name" list="series-names" placeholder="Series name (blank removes it)"
+                 value="{{ book.series.name if book.series else '' }}" aria-label="Series name" />
+          <input type="number" name="series_index" step="any" min="0" placeholder="#"
+                 value="{{ ('%g' % book.series_index) if book.series_index is not none else '' }}" aria-label="Number in series" />
+          <button type="submit" class="btn btn-small">Save</button>
+          <datalist id="series-names">
+            {% for name in series_names %}<option value="{{ name }}"></option>{% endfor %}
+          </datalist>
+        </form>
+      </details>
+    {% endif %}
     <div class="progress-line">
       {% if finished %}
         Finished — {{ progress.updated_at.strftime('%Y-%m-%d %H:%M') }}

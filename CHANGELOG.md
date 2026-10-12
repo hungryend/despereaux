@@ -18,6 +18,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   admin-only on both the web form and `POST /api/books/{id}/convert`.
 
 ### Added
+- **"By series" library view**: a fourth option on the sort bar. Books that
+  share a series collapse into a single stacked tile (the first book's cover,
+  a book count) that opens a new **series page** (`/series/{id}`) listing the
+  books in reading order with each profile's progress. Standalone books — and
+  the only book of a series in view — stay as normal tiles with a "Series #n"
+  line. Title A–Z stays the default.
+- **Set a book's series by hand** (admins): a "Set series" control on the book
+  page, with suggestions from existing series names, plus
+  `PUT /api/books/{id}/series` for scripted backfills. Most files carry no
+  series metadata, so this is what fills the series view. A re-scan of a
+  changed file keeps the hand-set series unless the file itself names one.
+- **Each profile remembers its library view**: picking a sort (title, author,
+  series, recently added) is saved per user (`users.library_sort`, migration
+  `0010_user_library_sort`) and reopened on the next plain visit to `/`.
 - **Regression suite** ahead of the full dependency refresh, in three tiers.
   In-repo: ~70 new tests covering the previously untested read path
   (`/api/books/{id}/file` ETag/304/Range/content-negotiation, covers,

@@ -1,0 +1,52 @@
+{# Library tiles shared by the library grid and the series page. #}
+
+{# show_series: false (default), "full" ("Series #2") or "index" ("#2" — on the
+   series page, where the name is already the heading). #}
+{% macro book_card(book, progress_map, show_series=false) %}
+  {% set authors = book.authors|map(attribute='author')|map(attribute='name')|list %}
+  <a class="book-card" href="/book/{{ book.id }}">
+    <div class="cover">
+      {% if book.cover_path %}
+        <img src="/api/books/{{ book.id }}/cover" alt="" loading="lazy" />
+      {% else %}
+        <div class="no-cover"><span>{{ book.title[:1]|upper }}</span></div>
+      {% endif %}
+      {% if book.epub_export_path %}
+        <span class="card-badge" title="EPUB version available">EPUB</span>
+      {% endif %}
+      {% set p = progress_map.get(book.id) %}
+      {% if p and p > 0 %}
+        <div class="progress-bar"><span style="width: {{ (p * 100)|round(1) }}%"></span></div>
+      {% endif %}
+    </div>
+    <div class="meta">
+      <div class="title">{{ book.title }}</div>
+      <div class="authors">{{ authors|join(', ') or '—' }}</div>
+      {% if show_series and book.series %}
+        {% set num = ('#' ~ ('%g' % book.series_index)) if book.series_index is not none else '' %}
+        <div class="series-line">{% if show_series == 'index' %}{{ num or 'Unnumbered' }}{% else %}{{ book.series.name }} {{ num }}{% endif %}</div>
+      {% endif %}
+    </div>
+  </a>
+{% endmacro %}
+
+{# One tile standing in for a whole series: the first book in reading order
+   fronts a stacked cover, and the tile opens the series page. #}
+{% macro series_card(tile) %}
+  {% set lead = tile.books[0] %}
+  {% set authors = lead.authors|map(attribute='author')|map(attribute='name')|list %}
+  <a class="book-card series-card" href="/series/{{ tile.series.id }}">
+    <div class="cover">
+      {% if lead.cover_path %}
+        <img src="/api/books/{{ lead.id }}/cover" alt="" loading="lazy" />
+      {% else %}
+        <div class="no-cover"><span>{{ tile.series.name[:1]|upper }}</span></div>
+      {% endif %}
+      <span class="card-badge series-count">{{ tile.books|length }} books</span>
+    </div>
+    <div class="meta">
+      <div class="title">{{ tile.series.name }}</div>
+      <div class="authors">{{ authors|join(', ') or '—' }}</div>
+    </div>
+  </a>
+{% endmacro %}

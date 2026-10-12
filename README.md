@@ -41,7 +41,7 @@ Open <http://localhost:8810> — that's it. Dev mode is on by default, a placeho
 
 - **In-browser reader** — full-height page-turn zones down both edges of the screen (tap, swipe or arrow keys), position retention per book, table of contents
 - **"On deck" continue-reading shelf** — books you're partway through surface in a row at the top of the library, most-recently-read first. Click a cover for a quick menu: **Resume reading**, book **details**, **Mark as read**, or **Mark as unread** (clears your saved position so the book drops off the shelf but stays in the library). Books only opened to the first page don't clutter the shelf, and neither do finished ones — reading through to the last page takes a book off the shelf automatically.
-- **Sort & group** — reorder the library grid by **title** or **recently added**, or **group by author** so every book an author wrote sits under one heading (a co-authored book appears under each of its authors)
+- **Sort & group** — reorder the library grid by **title** or **recently added**, or **group by author** so every book an author wrote sits under one heading (a co-authored book appears under each of its authors), or **group by series** so each series collapses into one stacked tile that opens the series in reading order. Every profile remembers its own choice; admins can set a book's series by hand when the file doesn't carry one
 - **Format support**:
   - **EPUB** — native via [epub.js]
   - **PDF** — native via [PDF.js], with byte-range streaming so huge files open instantly

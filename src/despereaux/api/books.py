@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from despereaux.db import get_db
-from despereaux.middleware.auth import current_user
+from despereaux.db import get_db, session_scope
+from despereaux.middleware.auth import current_user, require_admin
 from despereaux.repos import books as books_repo
 from despereaux.schemas.book import BookDetail, BookSummary, SeriesRead
 
@@ -74,3 +75,27 @@ async def get_book(
     if not book:
         raise HTTPException(status_code=404, detail="book not found")
     return _to_detail(book)
+
+
+class SeriesUpdate(BaseModel):
+    name: str | None = Field(
+        None, description="Series name; null/blank removes the book from its series"
+    )
+    index: float | None = Field(None, ge=0, description="Position in the series (e.g. 1, 2, 2.5)")
+
+
+@router.put("/{book_id}/series", response_model=BookSummary)
+async def put_series(
+    book_id: str,
+    body: SeriesUpdate,
+    _admin=Depends(require_admin),
+):
+    """Set a book's series by hand (admin). For scripted backfills — the web
+    book page has the same control."""
+    async with session_scope() as session:
+        book = await books_repo.get_book(session, book_id)
+        if not book:
+            raise HTTPException(status_code=404, detail="book not found")
+        await books_repo.set_series(session, book, body.name, body.index)
+    async with session_scope() as session:
+        return _to_summary(await books_repo.get_book(session, book_id))

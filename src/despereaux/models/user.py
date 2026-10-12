@@ -23,6 +23,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # The library view this profile last picked ("title" | "author" | "series" |
+    # "added"); None until they choose one, which means the default ("title").
+    library_sort: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

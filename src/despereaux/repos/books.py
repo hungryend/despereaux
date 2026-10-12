@@ -160,6 +160,50 @@ async def get_children(session: AsyncSession, parent_id: str) -> list[Book]:
     return list(result.scalars().all())
 
 
+async def get_series(session: AsyncSession, series_id: str) -> Series | None:
+    return await session.get(Series, series_id)
+
+
+async def list_books_in_series(session: AsyncSession, series_id: str) -> list[Book]:
+    """Top-level books in a series, in reading order: series_index ascending
+    (books with no index last), then title."""
+    stmt = (
+        select(Book)
+        .where(Book.series_id == series_id, Book.parent_book_id.is_(None))
+        .options(selectinload(Book.authors).selectinload(BookAuthor.author))
+        .order_by(Book.series_index.nulls_last(), Book.sort_title)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def list_series_names(session: AsyncSession) -> list[str]:
+    """Every series name that has at least one book, alphabetically — offered as
+    suggestions when setting a series by hand so spellings stay consistent."""
+    stmt = (
+        select(Series.name).join(Book, Book.series_id == Series.id).distinct().order_by(Series.name)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def set_series(
+    session: AsyncSession, book: Book, name: str | None, index: float | None
+) -> Series | None:
+    """Put `book` in the series called `name` at position `index` (creating the
+    series if new). A blank name takes the book out of its series. Re-ingesting
+    the file later keeps this unless the file itself carries series metadata."""
+    name = (name or "").strip()
+    if not name:
+        book.series_id = None
+        book.series_index = None
+        return None
+    series = await _get_or_create_series(session, name)
+    book.series_id = series.id
+    book.series_index = index
+    return series
+
+
 async def attach_to_parent(
     session: AsyncSession,
     *,
@@ -252,8 +296,11 @@ async def upsert_book(
     if existing:
         for k, v in fields.items():
             setattr(existing, k, v)
-        existing.series_id = series_id
-        existing.series_index = series_index
+        # A file without series metadata keeps the series the book already has
+        # (e.g. one set by hand via set_series); a file that carries one wins.
+        if series_id is not None:
+            existing.series_id = series_id
+            existing.series_index = series_index
         book = existing
     else:
         book = Book(
