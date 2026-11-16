@@ -9,7 +9,7 @@ ENV VITE_OUT_DIR=/build/dist
 RUN npm run build
 
 
-FROM python:3.13-slim AS backend
+FROM python:3.15-slim AS backend
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
